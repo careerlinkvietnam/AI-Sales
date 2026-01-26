@@ -30,6 +30,7 @@ export type SendDenyReason =
   | 'not_enabled'
   | 'kill_switch'
   | 'runtime_kill_switch'
+  | 'ramp_limited'
   | 'allowlist'
   | 'rate_limit'
   | 'no_allowlist_configured';

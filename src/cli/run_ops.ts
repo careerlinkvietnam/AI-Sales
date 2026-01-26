@@ -26,6 +26,8 @@ import { ExperimentScheduler } from '../domain/ExperimentScheduler';
 import { getSendPolicy } from '../domain/SendPolicy';
 import { getRuntimeKillSwitch } from '../domain/RuntimeKillSwitch';
 import { getMetricsStore } from '../data/MetricsStore';
+import { getRampPolicy } from '../domain/RampPolicy';
+import { runAutoStopJob } from '../jobs/AutoStopJob';
 
 // Load environment variables
 config();
@@ -824,6 +826,133 @@ program
     } catch (error) {
       console.error('Rollback failed:', (error as Error).message);
       process.exit(1);
+    }
+  });
+
+// ============================================================
+// Subcommand: ramp-status
+// ============================================================
+program
+  .command('ramp-status')
+  .description('Show current ramp (gradual rollout) policy status')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    const rampPolicy = getRampPolicy();
+    const metricsStore = getMetricsStore();
+    const json = opts.json || false;
+
+    const config = rampPolicy.getConfig();
+    const todayCount = metricsStore.countTodaySends();
+    const todayCap = rampPolicy.getTodayCap();
+    const canSendCheck = rampPolicy.canAutoSendToday(todayCount);
+
+    const status = {
+      enabled: rampPolicy.isEnabled(),
+      mode: rampPolicy.getMode(),
+      percentage: rampPolicy.getPercentage(),
+      todayCap,
+      todaySent: todayCount,
+      canSendMore: canSendCheck.ok,
+      remaining: canSendCheck.ok ? (todayCap ?? Infinity) - todayCount : 0,
+      config: {
+        daily_cap_schedule: config.daily_cap_schedule,
+        percentage: config.percentage,
+        min_sent_before_increase: config.min_sent_before_increase,
+      },
+    };
+
+    if (json) {
+      console.log(JSON.stringify(status, null, 2));
+    } else {
+      console.log('='.repeat(60));
+      console.log('Ramp Policy Status');
+      console.log('='.repeat(60));
+      console.log('');
+      console.log(`Enabled: ${status.enabled ? 'Yes' : 'No'}`);
+      console.log(`Mode: ${status.mode}`);
+      console.log('');
+      console.log('Today:');
+      console.log(`  Sent: ${status.todaySent}`);
+      console.log(`  Cap: ${status.todayCap ?? 'No cap (schedule passed)'}`);
+      console.log(`  Can send more: ${status.canSendMore ? 'Yes' : 'No'}`);
+      if (status.canSendMore && status.todayCap !== null) {
+        console.log(`  Remaining: ${status.remaining}`);
+      }
+      console.log('');
+      if (status.mode === 'percentage') {
+        console.log(`Percentage: ${(status.percentage * 100).toFixed(0)}%`);
+        console.log('');
+      }
+      if (status.mode === 'daily_cap' && config.daily_cap_schedule.length > 0) {
+        console.log('Daily Cap Schedule:');
+        for (const entry of config.daily_cap_schedule) {
+          const isToday = entry.date === new Date().toISOString().split('T')[0];
+          const marker = isToday ? ' <-- today' : '';
+          console.log(`  ${entry.date}: ${entry.cap}${marker}`);
+        }
+      }
+    }
+  });
+
+// ============================================================
+// Subcommand: auto-stop
+// ============================================================
+program
+  .command('auto-stop')
+  .description('Execute auto-stop evaluation (checks metrics and may activate kill switch)')
+  .option('--execute', 'Actually execute (default is dry-run)')
+  .option('--dry-run', 'Run evaluation without stopping (same as not using --execute)')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    const json = opts.json || false;
+    const dryRun = !opts.execute || opts.dryRun;
+
+    const result = runAutoStopJob({ dryRun });
+
+    if (json) {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.log('='.repeat(60));
+      console.log('Auto-Stop Evaluation');
+      console.log('='.repeat(60));
+      console.log('');
+      console.log(`Mode: ${dryRun ? 'DRY RUN' : 'EXECUTE'}`);
+      console.log(`Window: ${result.windowDays} days`);
+      console.log('');
+
+      if (result.already_stopped) {
+        console.log('Status: ALREADY STOPPED');
+        console.log(`  ${result.reasons[0]}`);
+      } else {
+        console.log('Metrics:');
+        console.log(`  Total Sent: ${result.metrics.totalSent}`);
+        console.log(`  Total Replies: ${result.metrics.totalReplies}`);
+        console.log(`  Total Blocked: ${result.metrics.totalBlocked}`);
+        console.log(`  Reply Rate: ${result.metrics.replyRate !== null ? (result.metrics.replyRate * 100).toFixed(2) + '%' : 'N/A'}`);
+        console.log(`  Blocked Rate: ${result.metrics.blockedRate !== null ? (result.metrics.blockedRate * 100).toFixed(1) + '%' : 'N/A'}`);
+        console.log(`  Consecutive Bad Days: ${result.metrics.consecutiveBadDays}`);
+        console.log('');
+        console.log(`Should Stop: ${result.should_stop ? 'YES' : 'No'}`);
+        if (result.reasons.length > 0) {
+          console.log('Reasons:');
+          for (const reason of result.reasons) {
+            console.log(`  - ${reason}`);
+          }
+        }
+        console.log('');
+        if (result.stopped) {
+          console.log('Action: STOPPED SENDING');
+          console.log('  RuntimeKillSwitch has been activated.');
+          console.log('');
+          console.log('To resume, run:');
+          console.log('  npx ts-node src/cli/run_ops.ts resume-send --reason "..." --set-by "..."');
+        } else if (dryRun && result.should_stop) {
+          console.log('Action: WOULD STOP (dry run)');
+          console.log('  Use --execute to actually stop sending.');
+        } else {
+          console.log('Action: No action needed');
+        }
+      }
     }
   });
 

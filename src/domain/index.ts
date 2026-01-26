@@ -129,3 +129,23 @@ export {
   resetRuntimeKillSwitch,
   createTestRuntimeKillSwitch,
 } from './RuntimeKillSwitch';
+export {
+  RampPolicy,
+  RampConfig,
+  DailyCapEntry,
+  RampMode,
+  RampCheckResult,
+  getRampPolicy,
+  resetRampPolicy,
+  createTestRampPolicy,
+} from './RampPolicy';
+export {
+  AutoStopPolicy,
+  AutoStopConfig,
+  AutoStopMetrics,
+  DailyMetrics,
+  AutoStopEvaluationResult,
+  getAutoStopPolicy,
+  resetAutoStopPolicy,
+  createTestAutoStopPolicy,
+} from './AutoStopPolicy';

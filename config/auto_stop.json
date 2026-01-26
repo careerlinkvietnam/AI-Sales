@@ -1,0 +1,7 @@
+{
+  "window_days": 3,
+  "min_sent_total": 30,
+  "reply_rate_min": 0.015,
+  "blocked_rate_max": 0.30,
+  "consecutive_days": 2
+}

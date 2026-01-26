@@ -1015,6 +1015,8 @@ npx ts-node src/cli/run_ops.ts <subcommand> [options]
 | `resume-send` | 送信再開（RuntimeKillSwitch無効化） | RuntimeKillSwitch |
 | `stop-status` | キルスイッチ/送信ポリシー状態確認 | SendPolicy + RuntimeKillSwitch |
 | `rollback` | 実験ロールバック | rollback_experiment.ts |
+| `ramp-status` | 段階リリース状況確認 | RampPolicy |
+| `auto-stop` | 自動停止評価（メトリクス監視） | AutoStopJob |
 
 #### scan サブコマンド
 
@@ -1582,6 +1584,209 @@ npx ts-node src/cli/run_ops.ts resume-send \
 npx ts-node src/cli/run_ops.ts status
 ```
 
+### 7.21 段階リリース（RampPolicy）
+
+自動送信を段階的に拡張するための機能です。日次キャップまたはパーセンテージモードで制御します。
+
+#### 設定ファイル（config/auto_send.json）
+
+```json
+{
+  "enabled": true,
+  "mode": "daily_cap",
+  "daily_cap_schedule": [
+    { "date": "2026-01-26", "cap": 1 },
+    { "date": "2026-01-27", "cap": 3 },
+    { "date": "2026-01-28", "cap": 5 },
+    { "date": "2026-01-29", "cap": 10 },
+    { "date": "2026-01-30", "cap": 20 }
+  ],
+  "percentage": 0.05,
+  "min_sent_before_increase": 50
+}
+```
+
+#### 設定項目
+
+| 項目 | 型 | 説明 | デフォルト |
+|------|-----|------|-----------|
+| `enabled` | boolean | 段階リリースを有効化 | true |
+| `mode` | `daily_cap` \| `percentage` | 制御モード | `daily_cap` |
+| `daily_cap_schedule` | array | 日付別の送信上限 | [] |
+| `percentage` | number | パーセンテージモード時の割合（0-1） | 0.05 |
+| `min_sent_before_increase` | number | 上限増加前の最小送信数 | 50 |
+
+#### モード説明
+
+**daily_cap モード**:
+- 日付ごとに送信上限を設定
+- スケジュールに載っていない日は、最も近い過去の日付の上限を使用
+- スケジュール開始前はすべてブロック
+- 段階的にキャップを増やすことで安全にロールアウト
+
+**percentage モード**:
+- 企業IDのハッシュ値に基づき、指定割合の企業のみ自動送信対象にする
+- 同じ企業は常に同じ結果（安定割当）
+- 例: `percentage: 0.1` で約10%の企業が対象
+
+#### ramp-status サブコマンド
+
+現在の段階リリース状況を確認します。
+
+```bash
+# テーブル出力
+npx ts-node src/cli/run_ops.ts ramp-status
+
+# JSON出力
+npx ts-node src/cli/run_ops.ts ramp-status --json
+```
+
+**出力例**:
+
+```
+============================================================
+Ramp Policy Status
+============================================================
+
+Enabled: Yes
+Mode: daily_cap
+
+Today:
+  Sent: 3
+  Cap: 5
+  Can send more: Yes
+  Remaining: 2
+
+Daily Cap Schedule:
+  2026-01-26: 1
+  2026-01-27: 3
+  2026-01-28: 5 <-- today
+  2026-01-29: 10
+  2026-01-30: 20
+```
+
+#### ブロック理由（ramp_limited）
+
+段階リリース制限でブロックされた場合、`AUTO_SEND_BLOCKED` イベントに `reason: "ramp_limited"` が記録されます。
+
+| 状況 | 詳細メッセージ |
+|------|----------------|
+| 日次上限到達 | `Daily cap reached: X/Y` |
+| スケジュール開始前 | `Ramp schedule not started yet` |
+| パーセンテージ除外 | `Company not in X% auto-send group` |
+
+### 7.22 自動停止（AutoStopPolicy & AutoStopJob）
+
+メトリクスを監視し、問題があれば自動的にRuntimeKillSwitchを有効化します。
+
+#### 設定ファイル（config/auto_stop.json）
+
+```json
+{
+  "window_days": 3,
+  "min_sent_total": 30,
+  "reply_rate_min": 0.015,
+  "blocked_rate_max": 0.30,
+  "consecutive_days": 2
+}
+```
+
+#### 設定項目
+
+| 項目 | 型 | 説明 | デフォルト |
+|------|-----|------|-----------|
+| `window_days` | number | 評価ウィンドウ（日数） | 3 |
+| `min_sent_total` | number | 評価に必要な最小送信数 | 30 |
+| `reply_rate_min` | number | 最小返信率（下回ると警告） | 0.015 (1.5%) |
+| `blocked_rate_max` | number | 最大ブロック率（上回ると警告） | 0.30 (30%) |
+| `consecutive_days` | number | 停止発動に必要な連続日数 | 2 |
+
+#### 停止判定ロジック
+
+1. **最小送信数チェック**: `totalSuccess >= min_sent_total` でなければ評価しない
+2. **返信率チェック**: `reply_rate < reply_rate_min` で警告
+3. **ブロック率チェック**: `blocked_rate > blocked_rate_max` で警告
+4. **連続日数チェック**: 上記問題が `consecutive_days` 日連続で発生したら停止
+
+**停止条件**: (返信率低下 OR ブロック率高い) AND 連続日数到達
+
+#### auto-stop サブコマンド
+
+自動停止評価を実行します。
+
+```bash
+# ドライラン（評価のみ、停止しない）
+npx ts-node src/cli/run_ops.ts auto-stop
+
+# 実際に停止を実行
+npx ts-node src/cli/run_ops.ts auto-stop --execute
+
+# JSON出力
+npx ts-node src/cli/run_ops.ts auto-stop --json
+```
+
+**出力例**:
+
+```
+============================================================
+Auto-Stop Evaluation
+============================================================
+
+Mode: DRY RUN
+Window: 3 days
+
+Metrics:
+  Total Sent: 150
+  Total Replies: 2
+  Total Blocked: 10
+  Reply Rate: 1.33%
+  Blocked Rate: 6.3%
+  Consecutive Bad Days: 2
+
+Should Stop: YES
+Reasons:
+  - Reply rate too low: 1.33% (min: 1.5%)
+  - 2 consecutive days with poor metrics (threshold: 2)
+
+Action: WOULD STOP (dry run)
+  Use --execute to actually stop sending.
+```
+
+#### 推奨運用
+
+**日次ルーチンに追加**:
+
+```bash
+# 毎日実行（自動停止評価）
+npx ts-node src/cli/run_ops.ts auto-stop --execute
+```
+
+**cronジョブ例**:
+
+```cron
+# 毎日9:00に自動停止評価
+0 9 * * * cd /path/to/AI-Sales && npx ts-node src/cli/run_ops.ts auto-stop --execute >> /var/log/auto-stop.log 2>&1
+```
+
+#### 停止後の復旧手順
+
+```bash
+# 1. 停止状態を確認
+npx ts-node src/cli/run_ops.ts stop-status
+
+# 2. 原因を調査
+npx ts-node src/cli/run_ops.ts report --since "$(date -v-7d +%Y-%m-%d)" --markdown
+
+# 3. 問題を解決
+
+# 4. 手動で再開
+npx ts-node src/cli/run_ops.ts resume-send \
+  --reason "自動停止後の手動再開、原因調査完了" \
+  --set-by "担当者名"
+```
+
+**重要**: 自動停止後の再開は常に人間が判断して `resume-send` を実行してください。自動再開は行われません。
+
 ### 7.17 推奨送信ワークフロー
 
 下書き作成から送信までの推奨フローです。
@@ -1846,3 +2051,4 @@ npx ts-node src/cli/run_ops.ts rollback \
 | 2026-01-26 | P4-1: 自動送信（限定パイロット）- SendPolicy, PreSendGate, send_draft CLI, AUTO_SEND_* メトリクス、緊急停止機能 |
 | 2026-01-26 | P4-2: 承認→送信ワンコマンド化 - DraftRegistry, approve_send CLI, approve-send サブコマンド、tracking_id紐付け強制 |
 | 2026-01-26 | P4-3: 緊急停止とロールバック - RuntimeKillSwitch, stop-send/resume-send/stop-status/rollback サブコマンド, rollback_experiment CLI, OPS_STOP_SEND/OPS_RESUME_SEND/OPS_ROLLBACK メトリクス |
+| 2026-01-26 | P4-4: 段階リリースと自動停止 - RampPolicy, AutoStopPolicy, AutoStopJob, ramp-status/auto-stop サブコマンド, ramp_limited ブロック理由追加 |

@@ -35,6 +35,7 @@ export type SendBlockedReason =
   | 'runtime_kill_switch'
   | 'allowlist'
   | 'rate_limit'
+  | 'ramp_limited'
   | 'gate_failed'
   | 'invalid_token'
   | 'no_allowlist_configured'

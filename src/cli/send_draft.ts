@@ -34,6 +34,7 @@ import { getPreSendGate } from '../domain/PreSendGate';
 import { getApprovalTokenManager } from '../domain/ApprovalToken';
 import { getMetricsStore, SendBlockedReason } from '../data/MetricsStore';
 import { getDraftRegistry } from '../data/DraftRegistry';
+import { getRampPolicy } from '../domain/RampPolicy';
 
 interface SendDraftOptions {
   draftId: string;
@@ -151,7 +152,60 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     };
   }
 
-  // Check 3: Approval token validation
+  // Check 3: Ramp policy (gradual rollout)
+  const rampPolicy = getRampPolicy();
+  if (rampPolicy.isEnabled()) {
+    // Check daily cap
+    const rampCheck = rampPolicy.canAutoSendToday(todayCount);
+    if (!rampCheck.ok) {
+      metricsStore.recordAutoSendBlocked({
+        trackingId,
+        companyId,
+        templateId,
+        abVariant,
+        draftId: options.draftId,
+        reason: 'ramp_limited',
+        details: rampCheck.reason,
+        recipientDomain,
+      });
+
+      return {
+        success: false,
+        sent: false,
+        dryRun: options.dryRun || false,
+        draftId: options.draftId,
+        blocked: true,
+        reason: 'ramp_limited',
+        details: rampCheck.reason,
+      };
+    }
+
+    // Check percentage mode company eligibility
+    if (rampPolicy.getMode() === 'percentage' && !rampPolicy.shouldAutoSendForCompany(companyId)) {
+      metricsStore.recordAutoSendBlocked({
+        trackingId,
+        companyId,
+        templateId,
+        abVariant,
+        draftId: options.draftId,
+        reason: 'ramp_limited',
+        details: `Company not in ${(rampPolicy.getPercentage() * 100).toFixed(0)}% auto-send group`,
+        recipientDomain,
+      });
+
+      return {
+        success: false,
+        sent: false,
+        dryRun: options.dryRun || false,
+        draftId: options.draftId,
+        blocked: true,
+        reason: 'ramp_limited',
+        details: `Company not in auto-send percentage group`,
+      };
+    }
+  }
+
+  // Check 4: Approval token validation
   const tokenResult = tokenManager.verifyToken(options.approvalToken);
   if (!tokenResult.valid) {
     metricsStore.recordAutoSendBlocked({
@@ -176,7 +230,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     };
   }
 
-  // Check 4: Token must match draft_id and tracking_id
+  // Check 5: Token must match draft_id and tracking_id
   const tokenPayload = tokenResult.payload!;
   if (tokenPayload.draftId !== options.draftId) {
     metricsStore.recordAutoSendBlocked({
@@ -225,7 +279,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     };
   }
 
-  // Check 5: PreSendGate (if subject/body provided)
+  // Check 6: PreSendGate (if subject/body provided)
   if (options.subject && options.body) {
     const gateResult = preSendGate.check({
       subject: options.subject,

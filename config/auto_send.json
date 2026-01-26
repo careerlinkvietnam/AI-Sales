@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "mode": "daily_cap",
+  "daily_cap_schedule": [
+    { "date": "2026-01-26", "cap": 1 },
+    { "date": "2026-01-27", "cap": 3 },
+    { "date": "2026-01-28", "cap": 5 },
+    { "date": "2026-01-29", "cap": 10 },
+    { "date": "2026-01-30", "cap": 20 }
+  ],
+  "percentage": 0.05,
+  "min_sent_before_increase": 50
+}
