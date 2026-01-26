@@ -7,13 +7,16 @@ import * as path from 'path';
 import { sendDraft, SendDraftOptions } from '../src/cli/send_draft';
 import { resetSendPolicy } from '../src/domain/SendPolicy';
 import { resetMetricsStore } from '../src/data/MetricsStore';
+import { DraftRegistry, resetDraftRegistry } from '../src/data/DraftRegistry';
 import { ApprovalTokenManager } from '../src/domain/ApprovalToken';
 
 describe('send_draft CLI', () => {
   const testDir = path.join(__dirname, 'tmp_send_draft_test');
   const metricsPath = path.join(testDir, 'metrics.ndjson');
+  const draftsPath = path.join('data', 'drafts.ndjson');
   let tokenManager: ApprovalTokenManager;
   let validToken: string;
+  let draftRegistry: DraftRegistry;
 
   beforeEach(() => {
     // Create test directory
@@ -23,6 +26,13 @@ describe('send_draft CLI', () => {
     // Initialize empty metrics file
     fs.writeFileSync(metricsPath, '');
 
+    // Ensure data directory exists for draft registry
+    if (!fs.existsSync('data')) {
+      fs.mkdirSync('data', { recursive: true });
+    }
+    // Clear drafts file
+    fs.writeFileSync(draftsPath, '');
+
     // Set environment variables
     process.env.METRICS_STORE_PATH = metricsPath;
     process.env.APPROVAL_TOKEN_SECRET = 'test-secret-for-send-draft';
@@ -30,12 +40,30 @@ describe('send_draft CLI', () => {
     // Reset singletons
     resetSendPolicy();
     resetMetricsStore();
+    resetDraftRegistry();
 
-    // Create token manager and valid token
+    // Create draft registry and register test draft
+    draftRegistry = new DraftRegistry({
+      dataDir: 'data',
+      draftsFile: 'drafts.ndjson',
+    });
+    draftRegistry.registerDraft({
+      draftId: 'test-draft-123',
+      trackingId: 'test-tracking-id',
+      companyId: 'test-company',
+      templateId: 'test-template',
+      abVariant: 'A',
+      subject: 'Test Subject [CL-AI:12345678]',
+      body: 'Test Body',
+      toEmail: 'user@test.com',
+    });
+
+    // Create token manager and valid token with matching draft_id and tracking_id
     tokenManager = new ApprovalTokenManager({ secret: 'test-secret-for-send-draft' });
     validToken = tokenManager.generateToken({
       draftId: 'test-draft-123',
       companyId: 'test-company',
+      trackingId: 'test-tracking-id',
       candidateCount: 3,
       mode: 'stub',
     });
@@ -44,6 +72,10 @@ describe('send_draft CLI', () => {
   afterEach(() => {
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true });
+    }
+    // Clean up drafts file
+    if (fs.existsSync(draftsPath)) {
+      fs.unlinkSync(draftsPath);
     }
     delete process.env.METRICS_STORE_PATH;
     delete process.env.APPROVAL_TOKEN_SECRET;
@@ -54,6 +86,124 @@ describe('send_draft CLI', () => {
     delete process.env.SEND_MAX_PER_DAY;
     resetSendPolicy();
     resetMetricsStore();
+    resetDraftRegistry();
+  });
+
+  describe('registry checks', () => {
+    it('blocks when draft not in registry', async () => {
+      process.env.ENABLE_AUTO_SEND = 'true';
+      process.env.SEND_ALLOWLIST_DOMAINS = 'test.com';
+
+      // Create token for a draft that's NOT in registry
+      const unregisteredToken = tokenManager.generateToken({
+        draftId: 'unregistered-draft',
+        companyId: 'test-company',
+        trackingId: 'unregistered-tracking',
+        candidateCount: 1,
+        mode: 'stub',
+      });
+
+      const options: SendDraftOptions = {
+        draftId: 'unregistered-draft',
+        to: 'user@test.com',
+        approvalToken: unregisteredToken,
+      };
+
+      const result = await sendDraft(options);
+      expect(result.success).toBe(false);
+      expect(result.blocked).toBe(true);
+      expect(result.reason).toBe('not_in_registry');
+    });
+
+    it('allows draft that exists in registry', async () => {
+      process.env.ENABLE_AUTO_SEND = 'true';
+      process.env.SEND_ALLOWLIST_DOMAINS = 'test.com';
+
+      const options: SendDraftOptions = {
+        draftId: 'test-draft-123',
+        to: 'user@test.com',
+        approvalToken: validToken,
+      };
+
+      const result = await sendDraft(options);
+      expect(result.success).toBe(true);
+      expect(result.sent).toBe(true);
+    });
+
+    it('uses registry values for metrics when available', async () => {
+      process.env.ENABLE_AUTO_SEND = 'true';
+      process.env.SEND_ALLOWLIST_DOMAINS = 'test.com';
+
+      const options: SendDraftOptions = {
+        draftId: 'test-draft-123',
+        to: 'user@test.com',
+        approvalToken: validToken,
+        // Don't provide trackingId - should use registry value
+      };
+
+      await sendDraft(options);
+
+      const metricsContent = fs.readFileSync(metricsPath, 'utf-8');
+      expect(metricsContent).toContain('test-tracking-id');
+      expect(metricsContent).toContain('test-company');
+      expect(metricsContent).toContain('test-template');
+    });
+  });
+
+  describe('token-draft matching', () => {
+    it('blocks when token draftId does not match', async () => {
+      process.env.ENABLE_AUTO_SEND = 'true';
+      process.env.SEND_ALLOWLIST_DOMAINS = 'test.com';
+
+      // Register another draft
+      draftRegistry.registerDraft({
+        draftId: 'another-draft',
+        trackingId: 'another-tracking',
+        companyId: 'another-company',
+        templateId: 'another-template',
+        abVariant: 'B',
+        subject: 'Another Subject',
+        body: 'Another Body',
+        toEmail: 'user@test.com',
+      });
+
+      // Use token for 'test-draft-123' but try to send 'another-draft'
+      const options: SendDraftOptions = {
+        draftId: 'another-draft',
+        to: 'user@test.com',
+        approvalToken: validToken, // This token is for test-draft-123
+      };
+
+      const result = await sendDraft(options);
+      expect(result.success).toBe(false);
+      expect(result.blocked).toBe(true);
+      expect(result.reason).toBe('token_draft_mismatch');
+    });
+
+    it('blocks when token trackingId does not match registry', async () => {
+      process.env.ENABLE_AUTO_SEND = 'true';
+      process.env.SEND_ALLOWLIST_DOMAINS = 'test.com';
+
+      // Create token with mismatched tracking ID
+      const mismatchedToken = tokenManager.generateToken({
+        draftId: 'test-draft-123',
+        companyId: 'test-company',
+        trackingId: 'wrong-tracking-id', // Registry has 'test-tracking-id'
+        candidateCount: 1,
+        mode: 'stub',
+      });
+
+      const options: SendDraftOptions = {
+        draftId: 'test-draft-123',
+        to: 'user@test.com',
+        approvalToken: mismatchedToken,
+      };
+
+      const result = await sendDraft(options);
+      expect(result.success).toBe(false);
+      expect(result.blocked).toBe(true);
+      expect(result.reason).toBe('token_draft_mismatch');
+    });
   });
 
   describe('policy checks', () => {
@@ -70,6 +220,8 @@ describe('send_draft CLI', () => {
       const result = await sendDraft(options);
       expect(result.success).toBe(false);
       expect(result.blocked).toBe(true);
+      // Registry check happens first now, so it passes
+      // Then policy check fails
       expect(result.reason).toBe('not_enabled');
     });
 
@@ -286,14 +438,15 @@ describe('send_draft CLI', () => {
         draftId: 'test-draft-123',
         to: 'user@test.com',
         approvalToken: validToken,
-        trackingId: 'track123',
+        // Note: trackingId from registry takes precedence
       };
 
       await sendDraft(options);
 
       const metricsContent = fs.readFileSync(metricsPath, 'utf-8');
       expect(metricsContent).toContain('AUTO_SEND_ATTEMPT');
-      expect(metricsContent).toContain('track123');
+      // Uses registry tracking ID, not provided one
+      expect(metricsContent).toContain('test-tracking-id');
     });
 
     it('records AUTO_SEND_SUCCESS event on success', async () => {

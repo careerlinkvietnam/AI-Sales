@@ -442,6 +442,7 @@ tail -10 logs/audit.ndjson | jq .
 - `AUTO_SEND_ATTEMPT`: 自動送信試行時
 - `AUTO_SEND_SUCCESS`: 自動送信成功時
 - `AUTO_SEND_BLOCKED`: 自動送信ブロック時（理由付き）
+- `SEND_APPROVED`: 送信承認時（approve_send成功）
 
 **記録される情報**:
 - タイムスタンプ
@@ -1094,39 +1095,139 @@ npx ts-node src/cli/run_ops.ts status --all
 - `ENABLE_AUTO_SEND=true` が設定されていること
 - `KILL_SWITCH=false`（またはKILL_SWITCH未設定）
 - 送信先が `SEND_ALLOWLIST_DOMAINS` または `SEND_ALLOWLIST_EMAILS` に含まれていること
-- 有効なApprovalTokenが提供されること
+- 下書きがDraftRegistryに登録されていること（本システムで作成された下書きのみ送信可能）
+- 有効なApprovalTokenが提供されること（draft_idとtracking_idが一致すること）
 
 ```bash
-# ドライラン（送信せず、チェックのみ）
-npx ts-node src/cli/run_ops.ts send \
-  --draft-id "draft-123" \
-  --to "user@allowed-domain.com" \
-  --approval-token "..." \
-  --dry-run
-
 # 実際に送信
 npx ts-node src/cli/run_ops.ts send \
   --draft-id "draft-123" \
   --to "user@allowed-domain.com" \
-  --approval-token "..." \
-  --tracking-id "track123" \
-  --company-id "company123" \
-  --template-id "template123" \
-  --ab-variant "A"
+  --approval-token "..."
 ```
 
-### 7.14 自動送信（send_draft CLI）
+#### approve-send サブコマンド（推奨）
+
+下書きの承認と送信をワンコマンドで実行します。これが推奨ワークフローです。
+
+```bash
+# ドライラン（承認トークン発行 + 送信可能性確認、実際には送信しない）
+npx ts-node src/cli/run_ops.ts approve-send \
+  --draft-id "draft-123" \
+  --approved-by "承認者名" \
+  --reason "南部パイロット" \
+  --to "user@allowed-domain.com"
+
+# 実際に送信（--execute を付ける）
+npx ts-node src/cli/run_ops.ts approve-send \
+  --draft-id "draft-123" \
+  --approved-by "承認者名" \
+  --reason "南部パイロット" \
+  --to "user@allowed-domain.com" \
+  --execute
+
+# チケット参照付き
+npx ts-node src/cli/run_ops.ts approve-send \
+  --draft-id "draft-123" \
+  --approved-by "承認者名" \
+  --reason "JIRA-123の承認に基づく" \
+  --ticket "JIRA-123" \
+  --to "user@allowed-domain.com" \
+  --execute
+```
+
+**オプション**:
+
+| オプション | 説明 | 必須 |
+|------------|------|------|
+| `--draft-id <id>` | Gmail下書きID | ✓ |
+| `--approved-by <name>` | 承認者名/ID | ✓ |
+| `--reason <reason>` | 承認理由 | ✓ |
+| `--to <email>` | 送信先（--execute時は必須） | - |
+| `--ticket <ticket>` | 参照チケット | - |
+| `--execute` | 承認後に実際に送信 | - |
+| `--json` | JSON出力 | - |
+
+### 7.14 DraftRegistry（下書き登録）
+
+`run_one_company` で作成された下書きのメタ情報を `data/drafts.ndjson` に記録します。
+
+#### 目的
+
+- **本システムで生成された下書きのみ送信可能にする**セキュリティ制御
+- 承認トークンの `draft_id` と `tracking_id` を検証し、改竄を防止
+- 送信時に tracking_id/company_id/template_id/ab_variant を自動取得
+
+#### 保存される情報（PII-free）
+
+| フィールド | 説明 |
+|------------|------|
+| `timestamp` | 作成日時 |
+| `draftId` | Gmail下書きID |
+| `trackingId` | トラッキングID |
+| `companyId` | 企業ID |
+| `templateId` | テンプレートID |
+| `abVariant` | A/Bバリアント |
+| `subjectHash` | 件名のSHA-256ハッシュ（件名自体は保存しない） |
+| `bodyHash` | 本文のSHA-256ハッシュ（本文自体は保存しない） |
+| `toDomain` | 送信先ドメインのみ（フルメールアドレスは保存しない） |
+
+**重要**: subject/bodyはハッシュのみ保存し、PIIは一切保存しません。
+
+### 7.15 送信承認（approve_send CLI）
+
+下書きの送信を承認し、ApprovalTokenを発行します。
+
+#### 実行方法
+
+```bash
+npx ts-node src/cli/approve_send.ts \
+  --draft-id "draft-123" \
+  --approved-by "承認者名" \
+  --reason "パイロット承認"
+```
+
+#### 動作
+
+1. DraftRegistryから `draft_id` を検索し、`tracking_id` 等を取得
+2. 見つからなければ拒否（本システム外の下書きは承認不可）
+3. ApprovalTokenを発行（ペイロードに `draft_id` + `tracking_id` を含む）
+4. `data/approvals.ndjson` に承認ログを追記（token全文は保存せず、fingerprintのみ）
+5. トークンを標準出力に返す
+
+#### 承認ログ（data/approvals.ndjson）
+
+```json
+{
+  "timestamp": "2026-01-26T10:00:00.000Z",
+  "type": "send",
+  "draftId": "draft-123",
+  "trackingId": "track-abc",
+  "companyId": "company-xyz",
+  "templateId": "template-001",
+  "abVariant": "A",
+  "approvedBy": "承認者名",
+  "reason": "パイロット承認",
+  "ticket": "JIRA-123",
+  "tokenFingerprint": "abc123def456..."
+}
+```
+
+**重要**: トークン全文は保存せず、fingerprint（SHA-256の先頭16文字）のみ保存します。
+
+### 7.16 自動送信（send_draft CLI）
 
 下書きを送信するCLIです。**限定パイロット**として、厳格な安全制御の下で運用されます。
 
 #### 設計原則
 
 1. **デフォルトは送信しない**: `ENABLE_AUTO_SEND=true` が明示的に設定されていない限り、送信は行われません
-2. **承認トークン必須**: ApprovalTokenが有効でなければ送信できません
-3. **Allowlist制限**: 送信先は `SEND_ALLOWLIST_DOMAINS` または `SEND_ALLOWLIST_EMAILS` に含まれている必要があります
-4. **緊急停止**: `KILL_SWITCH=true` で即座に全送信を停止できます
-5. **レート制限**: `SEND_MAX_PER_DAY` で日次送信数を制限します（デフォルト: 20）
-6. **PreSendGate**: 送信前にPII検出、禁止表現チェック、トラッキングタグ確認を実施します
+2. **DraftRegistry必須**: 本システムで作成された下書き（DraftRegistryに登録済み）のみ送信可能
+3. **承認トークン必須**: ApprovalTokenが有効で、`draft_id` と `tracking_id` が一致すること
+4. **Allowlist制限**: 送信先は `SEND_ALLOWLIST_DOMAINS` または `SEND_ALLOWLIST_EMAILS` に含まれている必要があります
+5. **緊急停止**: `KILL_SWITCH=true` で即座に全送信を停止できます
+6. **レート制限**: `SEND_MAX_PER_DAY` で日次送信数を制限します（デフォルト: 20）
+7. **PreSendGate**: 送信前にPII検出、禁止表現チェック、トラッキングタグ確認を実施します
 
 #### 実行方法
 
@@ -1170,25 +1271,29 @@ npx ts-node src/cli/send_draft.ts \
 #### 安全制御の流れ
 
 ```
-1. KILL_SWITCH チェック → true なら即座にブロック
-2. ENABLE_AUTO_SEND チェック → false ならブロック
-3. Allowlist チェック → 未設定または不一致ならブロック
-4. ApprovalToken 検証 → 無効ならブロック
-5. レート制限チェック → 日次上限超過ならブロック
-6. PreSendGate チェック → PII/禁止表現/トラッキングタグ
-7. Gmail API で送信
+1. DraftRegistry チェック → 登録されていない下書きはブロック
+2. KILL_SWITCH チェック → true なら即座にブロック
+3. ENABLE_AUTO_SEND チェック → false ならブロック
+4. Allowlist チェック → 未設定または不一致ならブロック
+5. ApprovalToken 検証 → 無効ならブロック
+6. Token-Draft マッチング → draft_id/tracking_id 不一致ならブロック
+7. レート制限チェック → 日次上限超過ならブロック
+8. PreSendGate チェック → PII/禁止表現/トラッキングタグ
+9. Gmail API で送信
 ```
 
 #### ブロック理由
 
 | 理由 | 説明 |
 |------|------|
+| `not_in_registry` | 下書きがDraftRegistryに登録されていない |
 | `not_enabled` | ENABLE_AUTO_SEND が true でない |
 | `kill_switch` | KILL_SWITCH が true |
 | `no_allowlist_configured` | Allowlist が未設定 |
 | `allowlist` | 送信先が Allowlist に含まれていない |
 | `rate_limit` | 日次送信上限に達した |
 | `invalid_token` | ApprovalToken が無効または改竄されている |
+| `token_draft_mismatch` | トークンの draft_id または tracking_id が不一致 |
 | `gate_failed` | PreSendGate チェックに失敗 |
 
 #### メトリクス記録
@@ -1227,7 +1332,57 @@ npx ts-node src/cli/run_ops.ts send \
 # → "kill_switch" でブロックされることを確認
 ```
 
-### 7.15 実験安全性チェック（ExperimentSafetyCheck）
+### 7.17 推奨送信ワークフロー
+
+下書き作成から送信までの推奨フローです。
+
+```
+run_one_company（下書き作成）
+    ↓
+  DraftRegistryに自動登録
+    ↓
+run_ops approve-send --dry-run（承認確認）
+    ↓
+  内容確認・送信可能性確認
+    ↓
+run_ops approve-send --execute（承認→送信）
+    ↓
+  SEND_APPROVED + AUTO_SEND_SUCCESS 記録
+```
+
+#### 具体的なコマンド
+
+```bash
+# Step 1: 下書き作成
+npx ts-node src/cli/run_one_company.ts --tag "南部・3月連絡"
+# → draftId が出力される
+
+# Step 2: 承認確認（ドライラン）
+npx ts-node src/cli/run_ops.ts approve-send \
+  --draft-id "<出力されたdraftId>" \
+  --approved-by "承認者名" \
+  --reason "南部パイロット" \
+  --to "user@allowed-domain.com"
+# → 承認トークンと送信可能性が表示される
+
+# Step 3: 承認→送信（実行）
+npx ts-node src/cli/run_ops.ts approve-send \
+  --draft-id "<draftId>" \
+  --approved-by "承認者名" \
+  --reason "南部パイロット" \
+  --to "user@allowed-domain.com" \
+  --execute
+# → 承認ログ記録 + メール送信
+```
+
+#### 重要な制約
+
+1. **DraftRegistry必須**: `run_one_company` で作成された下書きのみ送信可能
+2. **tracking_id紐付け**: 承認トークンの `tracking_id` と DraftRegistry の `tracking_id` が一致すること
+3. **PII保存禁止**: 宛先はドメインのみ記録（フルメールアドレスは保存しない）
+4. **監査ログ**: 承認/送信の全履歴が `data/approvals.ndjson` と `data/metrics.ndjson` に記録される
+
+### 7.18 実験安全性チェック（ExperimentSafetyCheck）
 
 実験の健全性をチェックし、凍結/ロールバックを**推奨**します。
 
@@ -1397,3 +1552,4 @@ npx ts-node src/cli/run_ops.ts safety --experiment "ab_subject_cta_v1"
 | 2026-01-26 | P3-6: テンプレート承認ワークフロー（TemplateQualityGate, approve_templates CLI, 承認ログ） |
 | 2026-01-26 | P3-7: 実験ライフサイクル管理（status, startAt, endAt, rollbackRule, ExperimentScheduler, ExperimentSafetyCheck, run_ops CLI, 日次/週次ルーチン） |
 | 2026-01-26 | P4-1: 自動送信（限定パイロット）- SendPolicy, PreSendGate, send_draft CLI, AUTO_SEND_* メトリクス、緊急停止機能 |
+| 2026-01-26 | P4-2: 承認→送信ワンコマンド化 - DraftRegistry, approve_send CLI, approve-send サブコマンド、tracking_id紐付け強制 |

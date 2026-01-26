@@ -7,3 +7,12 @@ export {
   createTestMetricsStore,
   resetMetricsStore,
 } from './MetricsStore';
+
+export {
+  DraftRegistry,
+  DraftEntry,
+  DraftLookupResult,
+  getDraftRegistry,
+  createTestDraftRegistry,
+  resetDraftRegistry,
+} from './DraftRegistry';

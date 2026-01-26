@@ -422,6 +422,190 @@ program
     }
   });
 
+// ============================================================
+// Subcommand: approve-send
+// ============================================================
+program
+  .command('approve-send')
+  .description('Approve and optionally send a draft (one-command workflow)')
+  .requiredOption('--draft-id <id>', 'Gmail draft ID to approve')
+  .requiredOption('--approved-by <name>', 'Approver name/ID')
+  .requiredOption('--reason <reason>', 'Approval reason')
+  .option('--to <email>', 'Recipient email address (required for --execute)')
+  .option('--ticket <ticket>', 'Reference ticket (e.g., JIRA-123)')
+  .option('--execute', 'Actually send after approval (default: dry-run)')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    const { approveSend } = await import('./approve_send');
+    const json = opts.json || false;
+
+    // Step 1: Approve
+    if (!json) {
+      console.log('Step 1: Approving draft...');
+    }
+
+    const approvalResult = approveSend({
+      draftId: opts.draftId,
+      approvedBy: opts.approvedBy,
+      reason: opts.reason,
+      ticket: opts.ticket,
+    });
+
+    if (!approvalResult.success) {
+      if (json) {
+        console.log(JSON.stringify({
+          success: false,
+          step: 'approve',
+          error: approvalResult.error,
+        }, null, 2));
+      } else {
+        console.error('Approval failed:');
+        console.error(`  ${approvalResult.error}`);
+      }
+      process.exit(1);
+    }
+
+    if (!json) {
+      console.log(`  Approved! Token fingerprint: ${approvalResult.tokenFingerprint}`);
+      console.log(`  Tracking ID: ${approvalResult.trackingId}`);
+    }
+
+    // Step 2: Check send policy (even for dry-run)
+    if (!json) {
+      console.log('');
+      console.log('Step 2: Checking send policy...');
+    }
+
+    const policy = getSendPolicy();
+    if (!policy.isSendingEnabled()) {
+      const config = policy.getConfig();
+      if (json) {
+        console.log(JSON.stringify({
+          success: true,
+          step: 'policy_check',
+          approved: true,
+          approvalToken: approvalResult.approvalToken,
+          canSend: false,
+          reason: config.killSwitch ? 'kill_switch' : 'not_enabled',
+          trackingId: approvalResult.trackingId,
+        }, null, 2));
+      } else {
+        console.log('  Send policy check:');
+        console.log(`    ENABLE_AUTO_SEND: ${config.enableAutoSend}`);
+        console.log(`    KILL_SWITCH: ${config.killSwitch}`);
+        console.log('');
+        console.log('  Cannot send: Sending is not enabled.');
+        console.log('');
+        console.log('Approval token (for later use):');
+        console.log(approvalResult.approvalToken);
+      }
+      process.exit(opts.execute ? 1 : 0);
+    }
+
+    // Check allowlist if --to provided
+    if (opts.to) {
+      const policyCheck = policy.checkSendPermission(opts.to, 0);
+      if (!policyCheck.allowed) {
+        if (json) {
+          console.log(JSON.stringify({
+            success: true,
+            step: 'policy_check',
+            approved: true,
+            approvalToken: approvalResult.approvalToken,
+            canSend: false,
+            reason: policyCheck.reason,
+            details: policyCheck.details,
+            trackingId: approvalResult.trackingId,
+          }, null, 2));
+        } else {
+          console.log(`  Send policy check failed: ${policyCheck.reason}`);
+          console.log(`    ${policyCheck.details}`);
+          console.log('');
+          console.log('Approval token (for later use):');
+          console.log(approvalResult.approvalToken);
+        }
+        process.exit(opts.execute ? 1 : 0);
+      }
+    }
+
+    if (!json) {
+      console.log('  Send policy: OK');
+    }
+
+    // Step 3: Execute or dry-run
+    if (!opts.execute) {
+      // Dry-run: show approval token and exit
+      if (json) {
+        console.log(JSON.stringify({
+          success: true,
+          dryRun: true,
+          approved: true,
+          draftId: approvalResult.draftId,
+          trackingId: approvalResult.trackingId,
+          companyId: approvalResult.companyId,
+          templateId: approvalResult.templateId,
+          abVariant: approvalResult.abVariant,
+          approvalToken: approvalResult.approvalToken,
+          tokenFingerprint: approvalResult.tokenFingerprint,
+          canSend: true,
+          message: 'Dry run - use --execute to actually send',
+        }, null, 2));
+      } else {
+        console.log('');
+        console.log('Dry run - approval successful, not sending.');
+        console.log('');
+        console.log('To send, use:');
+        console.log(`  npx ts-node src/cli/run_ops.ts approve-send \\`);
+        console.log(`    --draft-id "${opts.draftId}" \\`);
+        console.log(`    --approved-by "${opts.approvedBy}" \\`);
+        console.log(`    --reason "${opts.reason}" \\`);
+        console.log(`    --to "<recipient@domain.com>" \\`);
+        console.log(`    --execute`);
+        console.log('');
+        console.log('Or use the approval token directly:');
+        console.log(`  npx ts-node src/cli/send_draft.ts \\`);
+        console.log(`    --draft-id "${opts.draftId}" \\`);
+        console.log(`    --to "<recipient@domain.com>" \\`);
+        console.log(`    --approval-token "${approvalResult.approvalToken}"`);
+      }
+      return;
+    }
+
+    // Execute: send the draft
+    if (!opts.to) {
+      if (json) {
+        console.log(JSON.stringify({
+          success: false,
+          step: 'send',
+          error: '--to is required when using --execute',
+        }, null, 2));
+      } else {
+        console.error('Error: --to is required when using --execute');
+      }
+      process.exit(1);
+    }
+
+    if (!json) {
+      console.log('');
+      console.log('Step 3: Sending draft...');
+    }
+
+    const args: string[] = [];
+    args.push('--draft-id', opts.draftId);
+    args.push('--to', opts.to);
+    args.push('--approval-token', approvalResult.approvalToken!);
+    if (json) args.push('--json');
+
+    try {
+      await execCli('send_draft', args);
+    } catch (error) {
+      if (!json) {
+        console.error('Send failed:', (error as Error).message);
+      }
+      process.exit(1);
+    }
+  });
+
 // Parse and run
 program.parse();
 

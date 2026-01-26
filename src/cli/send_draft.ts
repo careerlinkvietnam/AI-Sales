@@ -33,6 +33,7 @@ import { getSendPolicy } from '../domain/SendPolicy';
 import { getPreSendGate } from '../domain/PreSendGate';
 import { getApprovalTokenManager } from '../domain/ApprovalToken';
 import { getMetricsStore, SendBlockedReason } from '../data/MetricsStore';
+import { getDraftRegistry } from '../data/DraftRegistry';
 
 interface SendDraftOptions {
   draftId: string;
@@ -77,15 +78,19 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
   const preSendGate = getPreSendGate();
   const tokenManager = getApprovalTokenManager();
   const metricsStore = getMetricsStore();
+  const draftRegistry = getDraftRegistry();
 
   const recipientDomain = extractDomain(options.to);
   const todayCount = metricsStore.countTodaySends();
 
-  // Default values for metrics
-  const trackingId = options.trackingId || 'unknown';
-  const companyId = options.companyId || 'unknown';
-  const templateId = options.templateId || 'unknown';
-  const abVariant = options.abVariant || null;
+  // Look up draft in registry to get metadata (if exists)
+  const registryLookup = draftRegistry.lookupByDraftId(options.draftId);
+
+  // Use registry values if available, otherwise use provided options
+  const trackingId = registryLookup.entry?.trackingId || options.trackingId || 'unknown';
+  const companyId = registryLookup.entry?.companyId || options.companyId || 'unknown';
+  const templateId = registryLookup.entry?.templateId || options.templateId || 'unknown';
+  const abVariant = registryLookup.entry?.abVariant || options.abVariant || null;
 
   // Record attempt
   metricsStore.recordAutoSendAttempt({
@@ -97,7 +102,31 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     recipientDomain,
   });
 
-  // Check 1: Send policy (enabled, kill switch, allowlist, rate limit)
+  // Check 1: Draft must exist in registry (security check - only send system-generated drafts)
+  if (!registryLookup.found) {
+    metricsStore.recordAutoSendBlocked({
+      trackingId,
+      companyId,
+      templateId,
+      abVariant,
+      draftId: options.draftId,
+      reason: 'not_in_registry',
+      details: `Draft ${options.draftId} not found in registry. Only drafts created by this system can be sent.`,
+      recipientDomain,
+    });
+
+    return {
+      success: false,
+      sent: false,
+      dryRun: options.dryRun || false,
+      draftId: options.draftId,
+      blocked: true,
+      reason: 'not_in_registry',
+      details: `Draft ${options.draftId} not found in registry. Only drafts created by this system can be sent.`,
+    };
+  }
+
+  // Check 2: Send policy (enabled, kill switch, allowlist, rate limit)
   const policyResult = sendPolicy.checkSendPermission(options.to, todayCount);
   if (!policyResult.allowed) {
     metricsStore.recordAutoSendBlocked({
@@ -122,7 +151,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     };
   }
 
-  // Check 2: Approval token validation
+  // Check 3: Approval token validation
   const tokenResult = tokenManager.verifyToken(options.approvalToken);
   if (!tokenResult.valid) {
     metricsStore.recordAutoSendBlocked({
@@ -147,7 +176,56 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     };
   }
 
-  // Check 3: PreSendGate (if subject/body provided)
+  // Check 4: Token must match draft_id and tracking_id
+  const tokenPayload = tokenResult.payload!;
+  if (tokenPayload.draftId !== options.draftId) {
+    metricsStore.recordAutoSendBlocked({
+      trackingId,
+      companyId,
+      templateId,
+      abVariant,
+      draftId: options.draftId,
+      reason: 'token_draft_mismatch',
+      details: `Token draftId (${tokenPayload.draftId}) does not match requested draftId (${options.draftId})`,
+      recipientDomain,
+    });
+
+    return {
+      success: false,
+      sent: false,
+      dryRun: options.dryRun || false,
+      draftId: options.draftId,
+      blocked: true,
+      reason: 'token_draft_mismatch',
+      details: `Token draftId does not match requested draftId`,
+    };
+  }
+
+  // Check tracking_id match if token has one
+  if (tokenPayload.trackingId && tokenPayload.trackingId !== trackingId) {
+    metricsStore.recordAutoSendBlocked({
+      trackingId,
+      companyId,
+      templateId,
+      abVariant,
+      draftId: options.draftId,
+      reason: 'token_draft_mismatch',
+      details: `Token trackingId (${tokenPayload.trackingId}) does not match registry trackingId (${trackingId})`,
+      recipientDomain,
+    });
+
+    return {
+      success: false,
+      sent: false,
+      dryRun: options.dryRun || false,
+      draftId: options.draftId,
+      blocked: true,
+      reason: 'token_draft_mismatch',
+      details: `Token trackingId does not match registry trackingId`,
+    };
+  }
+
+  // Check 5: PreSendGate (if subject/body provided)
   if (options.subject && options.body) {
     const gateResult = preSendGate.check({
       subject: options.subject,

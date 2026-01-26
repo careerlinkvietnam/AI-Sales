@@ -29,6 +29,7 @@ import { getAuditLogger } from '../domain/AuditLogger';
 import { getApprovalTokenManager } from '../domain/ApprovalToken';
 import { generateTrackingId, applyTrackingToEmail } from '../domain/Tracking';
 import { getABAssigner, ABVariant } from '../domain/ABAssigner';
+import { getDraftRegistry } from '../data/DraftRegistry';
 import {
   AuthError,
   NetworkError,
@@ -345,6 +346,7 @@ async function runPipeline(): Promise<PipelineResult> {
 
     const auditLogger = getAuditLogger();
     const tokenManager = getApprovalTokenManager();
+    const draftRegistry = getDraftRegistry();
     const mode = candidateClient.isStubMode() ? 'stub' : 'real';
 
     if (options.dryRun) {
@@ -390,7 +392,22 @@ async function runPipeline(): Promise<PipelineResult> {
         companyId: companyProfile.facts.companyId,
         candidateCount: includedCount,
         mode,
+        trackingId,
       });
+
+      // Register draft in DraftRegistry (for send_draft verification)
+      draftRegistry.registerDraft({
+        draftId: draftResult.draftId,
+        trackingId,
+        companyId: companyProfile.facts.companyId,
+        templateId: composeResult.templateId,
+        abVariant: composeResult.abVariant,
+        subject: email.subject,
+        body: email.body,
+        toEmail: recipientEmail,
+      });
+
+      logVerbose(`   Draft registered in DraftRegistry`);
 
       result.gmailDraft = {
         draftId: draftResult.draftId,

@@ -20,7 +20,8 @@ export type MetricEventType =
   | 'REPLY_DETECTED'
   | 'AUTO_SEND_ATTEMPT'
   | 'AUTO_SEND_SUCCESS'
-  | 'AUTO_SEND_BLOCKED';
+  | 'AUTO_SEND_BLOCKED'
+  | 'SEND_APPROVED';
 
 /**
  * Blocked reason types (for AUTO_SEND_BLOCKED events)
@@ -32,7 +33,9 @@ export type SendBlockedReason =
   | 'rate_limit'
   | 'gate_failed'
   | 'invalid_token'
-  | 'no_allowlist_configured';
+  | 'no_allowlist_configured'
+  | 'not_in_registry'
+  | 'token_draft_mismatch';
 
 /**
  * Metrics event structure
@@ -271,6 +274,35 @@ export class MetricsStore {
         reason: data.reason,
         details: data.details,
         recipientDomain: data.recipientDomain,
+      },
+    });
+  }
+
+  /**
+   * Record SEND_APPROVED event (approve_send CLI success)
+   */
+  recordSendApproved(data: {
+    trackingId: string;
+    companyId: string;
+    templateId: string;
+    abVariant: 'A' | 'B' | null;
+    draftId: string;
+    approvedBy: string;
+    tokenFingerprint: string;
+  }): void {
+    this.appendEvent({
+      trackingId: data.trackingId,
+      companyId: data.companyId,
+      templateId: data.templateId,
+      abVariant: data.abVariant,
+      eventType: 'SEND_APPROVED',
+      gmailThreadId: null,
+      replyLatencyHours: null,
+      meta: {
+        source: 'approve_send',
+        draftId: data.draftId,
+        approvedBy: data.approvedBy,
+        tokenFingerprint: data.tokenFingerprint,
       },
     });
   }

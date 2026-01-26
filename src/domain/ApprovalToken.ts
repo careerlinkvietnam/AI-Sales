@@ -23,6 +23,8 @@ export interface ApprovalTokenPayload {
   draftId: string;
   /** Company ID */
   companyId: string;
+  /** Tracking ID for this email */
+  trackingId?: string;
   /** Token creation timestamp */
   createdAt: string;
   /** Token expiration timestamp */
@@ -76,6 +78,7 @@ export class ApprovalTokenManager {
     companyId: string;
     candidateCount: number;
     mode: 'stub' | 'real';
+    trackingId?: string;
   }): string {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + this.ttlMs);
@@ -83,6 +86,7 @@ export class ApprovalTokenManager {
     const payload: ApprovalTokenPayload = {
       draftId: data.draftId,
       companyId: data.companyId,
+      trackingId: data.trackingId,
       createdAt: now.toISOString(),
       expiresAt: expiresAt.toISOString(),
       candidateCount: data.candidateCount,
@@ -98,6 +102,18 @@ export class ApprovalTokenManager {
 
     // Return token as payload.signature
     return `${payloadB64}.${signature}`;
+  }
+
+  /**
+   * Generate a fingerprint (short hash) of a token for logging
+   * Used to log token reference without storing full token
+   */
+  generateTokenFingerprint(token: string): string {
+    return crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex')
+      .substring(0, 16);
   }
 
   /**
