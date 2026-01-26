@@ -1,0 +1,41 @@
+{
+  "segments": {
+    "region": {
+      "description": "Geographic region based on tag or company location",
+      "values": ["南部", "中部", "北部", "不明"],
+      "default": "不明"
+    },
+    "customer_state": {
+      "description": "Customer relationship state based on contract history",
+      "values": ["existing", "new", "unknown"],
+      "default": "unknown"
+    },
+    "industry_bucket": {
+      "description": "Industry classification based on company profile",
+      "values": ["IT", "製造", "サービス", "その他", "不明"],
+      "default": "不明"
+    }
+  },
+  "rules": {
+    "region": {
+      "source": ["tag.region", "company.location.region"],
+      "mappings": {
+        "南部": ["南部", "Ho Chi Minh", "HCM", "HCMC", "Binh Duong", "Dong Nai"],
+        "中部": ["中部", "Da Nang", "Danang"],
+        "北部": ["北部", "Hanoi", "Ha Noi", "Hai Phong"]
+      }
+    },
+    "customer_state": {
+      "source": ["contactHistory.actionTypes"],
+      "existing_if": "has_contract_action"
+    },
+    "industry_bucket": {
+      "source": ["company.facts.industryText"],
+      "mappings": {
+        "IT": ["IT", "Software", "ソフトウェア", "システム", "テクノロジー", "Tech", "Digital", "Web", "アプリ", "SaaS"],
+        "製造": ["製造", "Manufacturing", "メーカー", "工場", "Factory", "生産", "機械", "電子", "部品", "自動車"],
+        "サービス": ["サービス", "Service", "コンサル", "Consulting", "人材", "HR", "物流", "Logistics", "商社", "Trading"]
+      }
+    }
+  }
+}

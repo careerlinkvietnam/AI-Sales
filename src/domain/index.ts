@@ -47,3 +47,27 @@ export {
   getABAssigner,
   createTestABAssigner,
 } from './ABAssigner';
+export {
+  ExperimentEvaluator,
+  ExperimentConfig,
+  ExperimentsRegistry,
+  ExperimentTemplate,
+  DecisionRule,
+  VariantMetrics,
+  StatisticalResults,
+  EvaluationDecision,
+  SegmentedMetrics,
+  SegmentedEvaluationDecision,
+  getExperimentEvaluator,
+  createTestExperimentEvaluator,
+} from './ExperimentEvaluator';
+export {
+  Segmenter,
+  SegmentClassification,
+  SegmentInput,
+  RegionSegment,
+  CustomerStateSegment,
+  IndustryBucketSegment,
+  getSegmenter,
+  createTestSegmenter,
+} from './Segmenter';

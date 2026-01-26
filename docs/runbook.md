@@ -648,6 +648,73 @@ npx ts-node src/cli/promote_winner.ts --experiment "ab_subject_cta_v1" --json
 3. **問題なければ**: `promote_winner.ts` で昇格実行
 4. **昇格後**: 新しいA/Bテストを設計（必要に応じて）
 
+### 7.9 セグメント定義（segments.json）
+
+セグメント分類の定義は `config/segments.json` で管理します。
+
+#### セグメント種別
+
+| セグメント | 値 | 説明 |
+|------------|-----|------|
+| `region` | 南部, 中部, 北部, 不明 | 地域（タグまたは会社情報から） |
+| `customerState` | existing, new, unknown | 顧客状態（契約履歴から） |
+| `industryBucket` | IT, 製造, サービス, その他, 不明 | 業種（会社プロフィールから） |
+
+#### 分類ルール
+
+1. **region**: タグの地域 → 会社location.region → province の順で判定
+2. **customerState**: 連絡履歴に `contract` アクションがあれば `existing`
+3. **industryBucket**: 会社のindustryTextを正規表現で分類（LLM不使用）
+
+**重要**: 判定できない場合は「不明/unknown」に落とす（推定しない）
+
+### 7.10 セグメント別メトリクスレポート
+
+セグメント別の返信率・返信速度を可視化します。
+
+#### 実行方法
+
+```bash
+# 基本実行
+npx ts-node src/cli/report_segment_metrics.ts
+
+# 特定日以降
+npx ts-node src/cli/report_segment_metrics.ts --since "2026-01-15"
+
+# Markdown出力＋判定結果
+npx ts-node src/cli/report_segment_metrics.ts --markdown --include-decision
+
+# 最小送信数を変更（デフォルト: 30）
+npx ts-node src/cli/report_segment_metrics.ts --min-sent 50
+```
+
+#### オプション
+
+| オプション | 説明 | デフォルト |
+|------------|------|-----------|
+| `--since <date>` | この日付以降のイベントのみ | 全件 |
+| `--json` | JSON出力のみ | false |
+| `--markdown` | Markdown形式で出力 | false |
+| `--min-sent <n>` | 信頼できる最小送信数 | 30 |
+| `--include-decision` | 探索的A/B判定を含める | false |
+
+#### 出力内容
+
+- **By Region**: 地域別のテンプレート/バリアント別メトリクス
+- **By Customer State**: 顧客状態別のメトリクス
+- **By Industry Bucket**: 業種別のメトリクス
+
+各行に `insufficient_n` フラグが付く場合、その行は母数不足で信頼性が低いことを示します。
+
+#### セグメント判定の注意事項
+
+> **重要**: セグメント別のA/B判定は**探索的（exploratory）**です。
+
+- 多重比較補正（Bonferroni等）は適用されていません
+- 仮説生成には使用可能ですが、最終判断には使用しないでください
+- 母数不足のセグメントは `winner=null, reason="insufficient_n"` となります
+- 本番の昇格判断は全体のA/B判定（`promote_winner.ts`）で行ってください
+
 ---
 
 ## 8. 連絡先
@@ -669,3 +736,4 @@ npx ts-node src/cli/promote_winner.ts --experiment "ab_subject_cta_v1" --json
 | 2026-01-26 | P3-1: トラッキングID、A/Bテンプレート運用追加 |
 | 2026-01-26 | P3-2: Gmail送信/返信スキャン、A/Bメトリクスレポート追加 |
 | 2026-01-26 | P3-3: A/B勝者判定（z検定）、昇格機能、experiments.json追加 |
+| 2026-01-26 | P3-4: セグメント別メトリクス、segments.json、探索的A/B判定追加 |

@@ -113,6 +113,25 @@ export interface EvaluationDecision {
 }
 
 /**
+ * Segmented metrics for evaluation
+ */
+export interface SegmentedMetrics {
+  segmentName: string;
+  segmentValue: string;
+  metricsA: VariantMetrics;
+  metricsB: VariantMetrics;
+}
+
+/**
+ * Segmented evaluation decision
+ */
+export interface SegmentedEvaluationDecision extends EvaluationDecision {
+  segmentName: string;
+  segmentValue: string;
+  isExploratory: boolean;
+}
+
+/**
  * Experiment Evaluator class
  */
 export class ExperimentEvaluator {
@@ -431,6 +450,75 @@ export class ExperimentEvaluator {
 
     // Clear cache
     this.registry = null;
+  }
+
+  /**
+   * Evaluate experiment for multiple segments
+   *
+   * Note: Segmented evaluation is EXPLORATORY.
+   * No multiple comparison correction is applied.
+   * Results should be used for hypothesis generation, not final decisions.
+   *
+   * @param experimentId - Experiment identifier
+   * @param segmentedMetrics - Array of segment metrics
+   * @param overrideDecisionRule - Optional override for decision rule
+   * @returns Array of segmented decisions
+   */
+  evaluateSegmented(
+    experimentId: string,
+    segmentedMetrics: SegmentedMetrics[],
+    overrideDecisionRule?: Partial<DecisionRule>
+  ): SegmentedEvaluationDecision[] {
+    const experiment = this.getExperiment(experimentId);
+
+    if (!experiment) {
+      throw new Error(`Experiment not found: ${experimentId}`);
+    }
+
+    const decisions: SegmentedEvaluationDecision[] = [];
+
+    for (const segment of segmentedMetrics) {
+      // Use override if provided, otherwise use experiment defaults
+      const minSent = overrideDecisionRule?.minLift !== undefined
+        ? experiment.minSentPerVariant
+        : experiment.minSentPerVariant;
+      const alpha = overrideDecisionRule?.alpha ?? experiment.decisionRule.alpha;
+      const minLift = overrideDecisionRule?.minLift ?? experiment.decisionRule.minLift;
+
+      // Create temporary experiment config for evaluation
+      const tempConfig: ExperimentConfig = {
+        ...experiment,
+        decisionRule: { alpha, minLift },
+      };
+
+      // Store original registry and temporarily set config
+      const originalRegistry = this.registry;
+      this.registry = {
+        experiments: [tempConfig],
+      };
+
+      try {
+        const baseDecision = this.evaluate(
+          experimentId,
+          segment.metricsA,
+          segment.metricsB
+        );
+
+        decisions.push({
+          ...baseDecision,
+          segmentName: segment.segmentName,
+          segmentValue: segment.segmentValue,
+          isExploratory: true, // Always mark as exploratory
+          // Override canPromote to false for segmented analysis
+          canPromote: false,
+        });
+      } finally {
+        // Restore original registry
+        this.registry = originalRegistry;
+      }
+    }
+
+    return decisions;
   }
 
   /**
