@@ -1,0 +1,1 @@
+export { TagNormalizer } from './TagNormalizer';

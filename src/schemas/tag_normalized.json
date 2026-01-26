@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://careerlink.vn/schemas/tag_normalized.json",
+  "title": "Normalized Tag Schema",
+  "definitions": {
+    "NormalizedTag": {
+      "type": "object",
+      "description": "Parsed and normalized tag for contact scheduling",
+      "properties": {
+        "rawTag": {
+          "type": "string",
+          "description": "Original tag string (e.g., '南部・3月連絡')"
+        },
+        "region": {
+          "type": ["string", "null"],
+          "description": "Extracted region (e.g., '南部', '北部', '中部')"
+        },
+        "contactMonth": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 12,
+          "description": "Target contact month (1-12)"
+        },
+        "contactYear": {
+          "type": ["integer", "null"],
+          "description": "Target contact year (calculated based on current date)"
+        },
+        "contactDate": {
+          "type": ["string", "null"],
+          "format": "date",
+          "description": "First day of target contact month (YYYY-MM-01)"
+        },
+        "isContactTag": {
+          "type": "boolean",
+          "description": "Whether this tag indicates a contact schedule"
+        },
+        "otherAttributes": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Any other extracted attributes from the tag"
+        }
+      },
+      "required": ["rawTag", "isContactTag"]
+    },
+    "TagParseResult": {
+      "type": "object",
+      "description": "Result of parsing a raw tag",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "description": "Whether parsing was successful"
+        },
+        "normalized": {
+          "$ref": "#/definitions/NormalizedTag",
+          "description": "Normalized tag data (if successful)"
+        },
+        "error": {
+          "type": ["string", "null"],
+          "description": "Error message (if parsing failed)"
+        }
+      },
+      "required": ["success"]
+    }
+  }
+}

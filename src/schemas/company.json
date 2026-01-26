@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://careerlink.vn/schemas/company.json",
+  "title": "Company Schemas",
+  "definitions": {
+    "CompanyStub": {
+      "type": "object",
+      "description": "Minimal company info for list views",
+      "properties": {
+        "companyId": {
+          "type": "string",
+          "description": "Unique company identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Company display name (name_ja or name_en)"
+        },
+        "region": {
+          "type": "string",
+          "description": "Geographic region (e.g., 南部, 北部, 中部)"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of tags attached to the company"
+        }
+      },
+      "required": ["companyId", "name"]
+    },
+    "CompanyDetail": {
+      "type": "object",
+      "description": "Full company details for profile generation",
+      "properties": {
+        "companyId": {
+          "type": "string",
+          "description": "Unique company identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Company display name"
+        },
+        "nameEn": {
+          "type": ["string", "null"],
+          "description": "English name"
+        },
+        "nameJa": {
+          "type": ["string", "null"],
+          "description": "Japanese name"
+        },
+        "nameLocal": {
+          "type": ["string", "null"],
+          "description": "Local language name"
+        },
+        "profile": {
+          "type": ["string", "null"],
+          "description": "Company description/profile"
+        },
+        "size": {
+          "type": ["string", "null"],
+          "description": "Company size category"
+        },
+        "url": {
+          "type": ["string", "null"],
+          "description": "Company website URL"
+        },
+        "region": {
+          "type": ["string", "null"],
+          "description": "Geographic region"
+        },
+        "province": {
+          "type": ["string", "null"],
+          "description": "Province/prefecture name"
+        },
+        "address": {
+          "type": ["string", "null"],
+          "description": "Full address"
+        },
+        "phone": {
+          "type": ["string", "null"],
+          "description": "Phone number"
+        },
+        "contactEmail": {
+          "type": ["string", "null"],
+          "description": "Contact email address"
+        },
+        "contactPerson": {
+          "type": ["string", "null"],
+          "description": "Primary contact person name"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of tags"
+        },
+        "offices": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Office" },
+          "description": "Company offices"
+        },
+        "staffs": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Staff" },
+          "description": "Known staff members"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Record creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Record last update timestamp"
+        }
+      },
+      "required": ["companyId", "name"]
+    },
+    "Office": {
+      "type": "object",
+      "properties": {
+        "officeId": { "type": "string" },
+        "name": { "type": ["string", "null"] },
+        "address": { "type": ["string", "null"] },
+        "province": { "type": ["string", "null"] },
+        "phone": { "type": ["string", "null"] },
+        "contactEmail": { "type": ["string", "null"] },
+        "contactPerson": { "type": ["string", "null"] }
+      },
+      "required": ["officeId"]
+    },
+    "Staff": {
+      "type": "object",
+      "properties": {
+        "staffId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": ["string", "null"] },
+        "phone": { "type": ["string", "null"] },
+        "department": { "type": ["string", "null"] },
+        "note": { "type": ["string", "null"] }
+      },
+      "required": ["staffId", "name"]
+    }
+  }
+}

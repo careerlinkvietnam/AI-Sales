@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://careerlink.vn/schemas/contact_history.json",
+  "title": "Contact History Schema",
+  "definitions": {
+    "ContactHistoryItem": {
+      "type": "object",
+      "description": "A single contact record (phone, visit, contract, etc.)",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "description": "Unique action identifier"
+        },
+        "actionType": {
+          "type": "string",
+          "enum": ["tel", "visit", "contract", "others"],
+          "description": "Type of contact action"
+        },
+        "performedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the action was performed"
+        },
+        "agentId": {
+          "type": ["string", "null"],
+          "description": "ID of the agent who performed the action"
+        },
+        "agentName": {
+          "type": ["string", "null"],
+          "description": "Name of the agent (for display)"
+        },
+        "staffId": {
+          "type": ["string", "null"],
+          "description": "ID of the contacted staff member"
+        },
+        "staffName": {
+          "type": ["string", "null"],
+          "description": "Name of the contacted staff member"
+        },
+        "place": {
+          "type": ["string", "null"],
+          "description": "Location of the action"
+        },
+        "summary": {
+          "type": ["string", "null"],
+          "description": "Sanitized summary of the contact (PII removed)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Record creation timestamp"
+        }
+      },
+      "required": ["actionId", "actionType", "performedAt"]
+    },
+    "ContactHistory": {
+      "type": "object",
+      "description": "Contact history for a company",
+      "properties": {
+        "companyId": {
+          "type": "string",
+          "description": "Company identifier"
+        },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ContactHistoryItem" },
+          "description": "List of contact history items, ordered by performedAt desc"
+        },
+        "totalCount": {
+          "type": "integer",
+          "description": "Total number of contact records"
+        }
+      },
+      "required": ["companyId", "items"]
+    }
+  }
+}

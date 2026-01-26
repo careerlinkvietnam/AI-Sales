@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://careerlink.vn/schemas/candidate.json",
+  "title": "Candidate Schema",
+  "description": "Candidate recommendation with rationale",
+  "definitions": {
+    "CandidateRationale": {
+      "type": "object",
+      "description": "Explanation of why this candidate is recommended",
+      "properties": {
+        "reasonTags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tags explaining match reasons (e.g., '勤務地一致', '業界近似', '職種一致')"
+        },
+        "evidenceFields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Source fields used for matching (e.g., 'company.location.region', 'company.industryText')"
+        }
+      },
+      "required": ["reasonTags", "evidenceFields"]
+    },
+    "Candidate": {
+      "type": "object",
+      "description": "A candidate recommendation",
+      "properties": {
+        "candidateId": {
+          "type": "string",
+          "description": "Unique candidate identifier"
+        },
+        "headline": {
+          "type": "string",
+          "description": "Brief summary of role/experience (no PII)"
+        },
+        "keySkills": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Key skills relevant to the company"
+        },
+        "location": {
+          "type": ["string", "null"],
+          "description": "Candidate's location/region"
+        },
+        "availability": {
+          "type": ["string", "null"],
+          "description": "Availability status"
+        },
+        "rationale": {
+          "$ref": "#/definitions/CandidateRationale",
+          "description": "Why this candidate matches"
+        }
+      },
+      "required": ["candidateId", "headline", "keySkills", "rationale"]
+    },
+    "CandidateSearchResult": {
+      "type": "object",
+      "properties": {
+        "candidates": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Candidate" }
+        },
+        "totalFound": {
+          "type": "integer"
+        },
+        "searchCriteria": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "required": ["candidates"]
+    }
+  }
+}

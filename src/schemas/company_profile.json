@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://careerlink.vn/schemas/company_profile.json",
+  "title": "Company Profile Schema",
+  "description": "Company profile with facts/assumptions separation for AI sales",
+  "definitions": {
+    "CompanyProfileFacts": {
+      "type": "object",
+      "description": "Verified facts from CRM data only",
+      "properties": {
+        "companyId": {
+          "type": "string",
+          "description": "CRM company ID (source: Company.id)"
+        },
+        "companyName": {
+          "type": "string",
+          "description": "Company display name (source: Company.name_ja || name_en || name_local)"
+        },
+        "location": {
+          "type": "object",
+          "properties": {
+            "region": {
+              "type": ["string", "null"],
+              "description": "Geographic region extracted from tags (南部/北部/中部)"
+            },
+            "province": {
+              "type": ["string", "null"],
+              "description": "Province/city name (source: Company.province_name)"
+            },
+            "address": {
+              "type": ["string", "null"],
+              "description": "Full address (source: Company.address)"
+            }
+          }
+        },
+        "industryText": {
+          "type": ["string", "null"],
+          "description": "Business description (source: Company.profile)"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Raw tags from CRM (source: Company.tags_snapshot)"
+        },
+        "contactHistoryExcerpt": {
+          "type": "object",
+          "description": "Summary of contact history (source: SalesAction records)",
+          "properties": {
+            "lastContactDate": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "description": "Most recent contact date"
+            },
+            "lastContactType": {
+              "type": ["string", "null"],
+              "enum": ["tel", "visit", "contract", "others", null],
+              "description": "Type of most recent contact"
+            },
+            "recentTopics": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Topics from recent contacts (PII removed)"
+            },
+            "totalContacts": {
+              "type": "integer",
+              "description": "Total number of contact records"
+            }
+          }
+        }
+      },
+      "required": ["companyId", "companyName", "tags"]
+    },
+    "CompanyProfileSummaries": {
+      "type": "object",
+      "description": "Generated summaries based on facts only",
+      "properties": {
+        "industrySummary": {
+          "type": ["string", "null"],
+          "description": "Summarized industry/business description"
+        },
+        "pastContactsSummary": {
+          "type": ["string", "null"],
+          "description": "Summary of past contact history"
+        }
+      }
+    },
+    "CompanyProfile": {
+      "type": "object",
+      "description": "Full company profile with facts/assumptions separation",
+      "properties": {
+        "facts": {
+          "$ref": "#/definitions/CompanyProfileFacts"
+        },
+        "summaries": {
+          "$ref": "#/definitions/CompanyProfileSummaries"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Explicit assumptions (never mix into facts or body text)"
+        },
+        "sourceRefs": {
+          "type": "object",
+          "description": "References to source data",
+          "properties": {
+            "companyId": {
+              "type": "string",
+              "description": "Source company ID"
+            },
+            "timelineItemIds": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "IDs of timeline items used"
+            }
+          },
+          "required": ["companyId"]
+        }
+      },
+      "required": ["facts", "summaries", "assumptions", "sourceRefs"]
+    }
+  }
+}
