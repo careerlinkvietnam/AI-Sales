@@ -19,3 +19,16 @@ export {
   ContentValidationResult,
   CandidateExclusionResult,
 } from './ContentGuards';
+export {
+  AuditLogger,
+  AuditLogEntry,
+  getAuditLogger,
+  createTestAuditLogger,
+} from './AuditLogger';
+export {
+  ApprovalTokenManager,
+  ApprovalTokenPayload,
+  TokenVerificationResult,
+  getApprovalTokenManager,
+  createTestTokenManager,
+} from './ApprovalToken';
