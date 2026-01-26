@@ -8,6 +8,7 @@
  *   npx ts-node src/cli/report_ab_metrics.ts
  *   npx ts-node src/cli/report_ab_metrics.ts --since "2026-01-01"
  *   npx ts-node src/cli/report_ab_metrics.ts --json
+ *   npx ts-node src/cli/report_ab_metrics.ts --markdown --include-decision
  *
  * 注意:
  * - 返信率の分母は SENT_DETECTED（draftは分母にしない）
@@ -17,6 +18,11 @@
 import { config } from 'dotenv';
 import { Command } from 'commander';
 import { getMetricsStore, MetricsEvent } from '../data/MetricsStore';
+import {
+  ExperimentEvaluator,
+  EvaluationDecision,
+  VariantMetrics,
+} from '../domain/ExperimentEvaluator';
 
 // Load environment variables
 config();
@@ -31,7 +37,9 @@ program
 
 program
   .option('--since <date>', 'Only include events since this date (ISO format)')
-  .option('--json', 'Output results as JSON only');
+  .option('--json', 'Output results as JSON only')
+  .option('--markdown', 'Output as Markdown table')
+  .option('--include-decision', 'Include statistical decision for experiments');
 
 program.parse();
 
@@ -67,6 +75,7 @@ interface MetricsReport {
     medianReplyLatencyHours: number | null;
   };
   byTemplate: TemplateMetrics[];
+  decisions?: EvaluationDecision[];
 }
 
 /**
@@ -85,7 +94,7 @@ function median(values: number[]): number | null {
 }
 
 /**
- * Logger that respects --json flag
+ * Logger that respects --json and --markdown flags
  */
 function log(message: string): void {
   if (!options.json) {
@@ -143,14 +152,16 @@ function generateReport(events: MetricsEvent[]): MetricsReport {
 
   for (const metrics of groupMap.values()) {
     // Reply rate = replies / sent_detected (avoid divide by zero)
-    metrics.replyRate = metrics.sentDetected > 0
-      ? Math.round((metrics.replies / metrics.sentDetected) * 1000) / 10 // percentage with 1 decimal
-      : null;
+    metrics.replyRate =
+      metrics.sentDetected > 0
+        ? Math.round((metrics.replies / metrics.sentDetected) * 1000) / 10 // percentage with 1 decimal
+        : null;
 
     // Median reply latency
     metrics.medianReplyLatencyHours = median(metrics.replyLatencies);
     if (metrics.medianReplyLatencyHours !== null) {
-      metrics.medianReplyLatencyHours = Math.round(metrics.medianReplyLatencyHours * 10) / 10;
+      metrics.medianReplyLatencyHours =
+        Math.round(metrics.medianReplyLatencyHours * 10) / 10;
     }
 
     // Accumulate totals
@@ -172,9 +183,8 @@ function generateReport(events: MetricsEvent[]): MetricsReport {
   });
 
   // Overall metrics
-  const overallReplyRate = totalSent > 0
-    ? Math.round((totalReplies / totalSent) * 1000) / 10
-    : null;
+  const overallReplyRate =
+    totalSent > 0 ? Math.round((totalReplies / totalSent) * 1000) / 10 : null;
 
   let overallMedianLatency = median(allLatencies);
   if (overallMedianLatency !== null) {
@@ -198,6 +208,70 @@ function generateReport(events: MetricsEvent[]): MetricsReport {
 }
 
 /**
+ * Add experiment decisions to report
+ */
+function addDecisions(
+  report: MetricsReport,
+  events: MetricsEvent[]
+): EvaluationDecision[] {
+  const evaluator = new ExperimentEvaluator();
+  const decisions: EvaluationDecision[] = [];
+
+  try {
+    const registry = evaluator.loadRegistry();
+
+    for (const experiment of registry.experiments) {
+      // Get template IDs
+      const templateA = experiment.templates.find((t) => t.variant === 'A');
+      const templateB = experiment.templates.find((t) => t.variant === 'B');
+
+      if (!templateA || !templateB) continue;
+
+      // Count events for this experiment
+      let sentA = 0,
+        sentB = 0,
+        replyA = 0,
+        replyB = 0;
+
+      for (const event of events) {
+        if (event.templateId === templateA.templateId) {
+          if (event.eventType === 'SENT_DETECTED') sentA++;
+          if (event.eventType === 'REPLY_DETECTED') replyA++;
+        } else if (event.templateId === templateB.templateId) {
+          if (event.eventType === 'SENT_DETECTED') sentB++;
+          if (event.eventType === 'REPLY_DETECTED') replyB++;
+        }
+      }
+
+      const metricsA: VariantMetrics = {
+        variant: 'A',
+        sent: sentA,
+        replies: replyA,
+        replyRate: sentA > 0 ? replyA / sentA : null,
+      };
+
+      const metricsB: VariantMetrics = {
+        variant: 'B',
+        sent: sentB,
+        replies: replyB,
+        replyRate: sentB > 0 ? replyB / sentB : null,
+      };
+
+      const decision = evaluator.evaluate(
+        experiment.experimentId,
+        metricsA,
+        metricsB
+      );
+      decisions.push(decision);
+    }
+  } catch {
+    // Silently skip if experiments.json doesn't exist
+  }
+
+  return decisions;
+}
+
+/**
  * Display report in human-readable format
  */
 function displayReport(report: MetricsReport): void {
@@ -218,15 +292,21 @@ function displayReport(report: MetricsReport): void {
   log(`  Drafts created:      ${report.overall.totalDrafts}`);
   log(`  Sent (detected):     ${report.overall.totalSent}`);
   log(`  Replies (detected):  ${report.overall.totalReplies}`);
-  log(`  Reply rate:          ${report.overall.overallReplyRate !== null ? `${report.overall.overallReplyRate}%` : 'N/A'}`);
-  log(`  Median reply time:   ${report.overall.medianReplyLatencyHours !== null ? `${report.overall.medianReplyLatencyHours}h` : 'N/A'}`);
+  log(
+    `  Reply rate:          ${report.overall.overallReplyRate !== null ? `${report.overall.overallReplyRate}%` : 'N/A'}`
+  );
+  log(
+    `  Median reply time:   ${report.overall.medianReplyLatencyHours !== null ? `${report.overall.medianReplyLatencyHours}h` : 'N/A'}`
+  );
   log('');
 
   // By Template
   if (report.byTemplate.length > 0) {
     log('By Template/Variant:');
     log('-'.repeat(70));
-    log('Template ID                  | Variant | Drafts | Sent | Replies | Rate');
+    log(
+      'Template ID                  | Variant | Drafts | Sent | Replies | Rate'
+    );
     log('-'.repeat(70));
 
     for (const tm of report.byTemplate) {
@@ -237,20 +317,130 @@ function displayReport(report: MetricsReport): void {
       const repliesPad = String(tm.replies).padStart(7);
       const ratePad = tm.replyRate !== null ? `${tm.replyRate}%` : 'N/A';
 
-      log(`${templatePad} | ${variantPad} | ${draftsPad} | ${sentPad} | ${repliesPad} | ${ratePad}`);
+      log(
+        `${templatePad} | ${variantPad} | ${draftsPad} | ${sentPad} | ${repliesPad} | ${ratePad}`
+      );
     }
     log('-'.repeat(70));
   } else {
     log('No data found for the specified period.');
   }
   log('');
+
+  // Decisions
+  if (report.decisions && report.decisions.length > 0) {
+    log('Experiment Decisions:');
+    log('-'.repeat(70));
+    for (const decision of report.decisions) {
+      log(`  ${decision.experimentId}:`);
+      log(`    Winner: ${decision.winnerVariant || 'None'}`);
+      log(`    Reason: ${decision.reasonText}`);
+      log(
+        `    P-value: ${decision.stats.pValue !== null ? decision.stats.pValue.toFixed(4) : 'N/A'}`
+      );
+      log(`    Can Promote: ${decision.canPromote ? 'Yes' : 'No'}`);
+      log('');
+    }
+  }
+}
+
+/**
+ * Display report in Markdown format
+ */
+function displayMarkdown(report: MetricsReport): void {
+  console.log('# A/B Metrics Report');
+  console.log('');
+  console.log('## Period');
+  console.log('');
+  console.log(`- **From**: ${report.period.since || '(all time)'}`);
+  console.log(`- **To**: ${report.period.until}`);
+  console.log('');
+
+  // Overall
+  console.log('## Overall Metrics');
+  console.log('');
+  console.log('| Metric | Value |');
+  console.log('|--------|-------|');
+  console.log(`| Drafts created | ${report.overall.totalDrafts} |`);
+  console.log(`| Sent (detected) | ${report.overall.totalSent} |`);
+  console.log(`| Replies (detected) | ${report.overall.totalReplies} |`);
+  console.log(
+    `| Reply rate | ${report.overall.overallReplyRate !== null ? `${report.overall.overallReplyRate}%` : 'N/A'} |`
+  );
+  console.log(
+    `| Median reply time | ${report.overall.medianReplyLatencyHours !== null ? `${report.overall.medianReplyLatencyHours}h` : 'N/A'} |`
+  );
+  console.log('');
+
+  // By Template
+  if (report.byTemplate.length > 0) {
+    console.log('## By Template/Variant');
+    console.log('');
+    console.log(
+      '| Template ID | Variant | Drafts | Sent | Replies | Rate | Median Latency |'
+    );
+    console.log('|-------------|---------|--------|------|---------|------|----------------|');
+
+    for (const tm of report.byTemplate) {
+      const rate = tm.replyRate !== null ? `${tm.replyRate}%` : 'N/A';
+      const latency =
+        tm.medianReplyLatencyHours !== null
+          ? `${tm.medianReplyLatencyHours}h`
+          : 'N/A';
+      console.log(
+        `| ${tm.templateId} | ${tm.abVariant || '-'} | ${tm.drafts} | ${tm.sentDetected} | ${tm.replies} | ${rate} | ${latency} |`
+      );
+    }
+    console.log('');
+  }
+
+  // Decisions
+  if (report.decisions && report.decisions.length > 0) {
+    console.log('## Experiment Decisions');
+    console.log('');
+
+    for (const decision of report.decisions) {
+      console.log(`### ${decision.experimentId}`);
+      console.log('');
+      console.log('| Metric | Variant A | Variant B |');
+      console.log('|--------|-----------|-----------|');
+      console.log(
+        `| Sent | ${decision.stats.sentA} | ${decision.stats.sentB} |`
+      );
+      console.log(
+        `| Replies | ${decision.stats.replyA} | ${decision.stats.replyB} |`
+      );
+      console.log(
+        `| Reply Rate | ${decision.stats.rateA !== null ? (decision.stats.rateA * 100).toFixed(1) + '%' : 'N/A'} | ${decision.stats.rateB !== null ? (decision.stats.rateB * 100).toFixed(1) + '%' : 'N/A'} |`
+      );
+      console.log('');
+      console.log('**Statistical Analysis:**');
+      console.log('');
+      console.log(
+        `- Z-score: ${decision.stats.zScore !== null ? decision.stats.zScore.toFixed(3) : 'N/A'}`
+      );
+      console.log(
+        `- P-value: ${decision.stats.pValue !== null ? decision.stats.pValue.toFixed(4) : 'N/A'}`
+      );
+      console.log(
+        `- Lift: ${decision.stats.liftPercent !== null ? (decision.stats.liftPercent * 100).toFixed(1) + '%' : 'N/A'}`
+      );
+      console.log('');
+      console.log('**Decision:**');
+      console.log('');
+      console.log(`- **Winner**: ${decision.winnerVariant || 'None'}`);
+      console.log(`- **Reason**: ${decision.reasonText}`);
+      console.log(`- **Can Promote**: ${decision.canPromote ? 'Yes' : 'No'}`);
+      console.log('');
+    }
+  }
 }
 
 /**
  * Main execution
  */
 async function main(): Promise<void> {
-  if (!options.json) {
+  if (!options.json && !options.markdown) {
     console.log('');
   }
 
@@ -263,16 +453,23 @@ async function main(): Promise<void> {
   // Generate report
   const report = generateReport(events);
 
+  // Add decisions if requested
+  if (options.includeDecision) {
+    report.decisions = addDecisions(report, events);
+  }
+
   if (options.json) {
     // Remove internal arrays from JSON output
     const jsonReport = {
       ...report,
-      byTemplate: report.byTemplate.map(t => {
+      byTemplate: report.byTemplate.map((t) => {
         const { replyLatencies, ...rest } = t;
         return rest;
       }),
     };
     console.log(JSON.stringify(jsonReport, null, 2));
+  } else if (options.markdown) {
+    displayMarkdown(report);
   } else {
     displayReport(report);
   }
@@ -281,7 +478,7 @@ async function main(): Promise<void> {
 }
 
 // Run
-main().catch(error => {
+main().catch((error) => {
   console.error('Fatal error:', error.message);
   process.exit(1);
 });

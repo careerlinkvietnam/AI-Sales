@@ -1,0 +1,29 @@
+{
+  "experiments": [
+    {
+      "experimentId": "ab_subject_cta_v1",
+      "name": "Subject and CTA A/B Test v1",
+      "description": "Compare formal style (A) vs direct style (B) for subject and CTA",
+      "startDate": "2026-01-26",
+      "endDate": null,
+      "primaryMetric": "reply_rate",
+      "minSentPerVariant": 50,
+      "decisionRule": {
+        "alpha": 0.05,
+        "minLift": 0.02
+      },
+      "templates": [
+        {
+          "templateId": "new_candidates_v1_A",
+          "variant": "A",
+          "status": "active"
+        },
+        {
+          "templateId": "new_candidates_v1_B",
+          "variant": "B",
+          "status": "active"
+        }
+      ]
+    }
+  ]
+}

@@ -517,6 +517,8 @@ npx ts-node src/cli/report_ab_metrics.ts --json
 |------------|------|-----------|
 | `--since <date>` | この日付以降のイベントのみ | 全件 |
 | `--json` | JSON出力のみ | false |
+| `--markdown` | Markdown形式で出力 | false |
+| `--include-decision` | 統計的判定結果を含める | false |
 
 #### 出力例（テーブル形式）
 
@@ -552,6 +554,100 @@ new_candidates_v1            | B       |     25 |   22 |       4 | 18.2%
 - **中央値レイテンシ**: 返信検出時に計算された `replyLatencyHours` の中央値
 - **バリアント比較**: 同一テンプレートのA/Bを並べて表示
 
+### 7.7 実験メタデータ（experiments.json）
+
+A/Bテストの実験設定は `config/experiments.json` で管理します。
+
+#### 構造
+
+```json
+{
+  "experiments": [
+    {
+      "experimentId": "ab_subject_cta_v1",
+      "name": "Subject and CTA A/B Test v1",
+      "startDate": "2026-01-26",
+      "endDate": null,
+      "primaryMetric": "reply_rate",
+      "minSentPerVariant": 50,
+      "decisionRule": {
+        "alpha": 0.05,
+        "minLift": 0.02
+      },
+      "templates": [
+        { "templateId": "new_candidates_v1_A", "variant": "A", "status": "active" },
+        { "templateId": "new_candidates_v1_B", "variant": "B", "status": "active" }
+      ]
+    }
+  ]
+}
+```
+
+#### 設定項目
+
+| 項目 | 説明 |
+|------|------|
+| `experimentId` | 実験の一意識別子 |
+| `minSentPerVariant` | 判定に必要な最小送信数（デフォルト: 50） |
+| `decisionRule.alpha` | 有意水準（デフォルト: 0.05 = 5%） |
+| `decisionRule.minLift` | 勝者判定に必要な最小リフト（デフォルト: 0.02 = 2%） |
+| `templates[].status` | `active`（使用中）または `archived`（昇格後の敗者） |
+
+### 7.8 A/B勝者判定と昇格（promote_winner）
+
+統計的に有意な勝者を判定し、テンプレートを昇格します。
+
+#### 実行方法
+
+```bash
+# 判定のみ（dry-run）
+npx ts-node src/cli/promote_winner.ts --experiment "ab_subject_cta_v1" --dry-run
+
+# 判定＋昇格実行
+npx ts-node src/cli/promote_winner.ts --experiment "ab_subject_cta_v1"
+
+# JSON出力
+npx ts-node src/cli/promote_winner.ts --experiment "ab_subject_cta_v1" --json
+```
+
+#### オプション
+
+| オプション | 説明 | デフォルト |
+|------------|------|-----------|
+| `--experiment <id>` | 実験ID（必須） | - |
+| `--since <date>` | この日付以降のデータのみ使用 | 全件 |
+| `--dry-run` | 判定のみ、変更なし | false |
+| `--json` | JSON出力のみ | false |
+
+#### 判定ロジック
+
+1. **サンプルサイズ確認**: 各バリアントが `minSentPerVariant` 以上あるか
+2. **z検定**: 二項比率の差の検定（two-tailed）
+3. **有意水準確認**: p値 < alpha であるか
+4. **最小リフト確認**: 差が minLift 以上あるか
+
+#### 昇格時の動作
+
+1. `config/experiments.json.bak-YYYYMMDDHHmmss` にバックアップ作成
+2. 勝者テンプレート: `status = "active"`
+3. 敗者テンプレート: `status = "archived"`
+4. 実験の `endDate` を設定
+
+#### 判定不可の場合の対処
+
+| 理由 | 対処方法 |
+|------|----------|
+| `insufficient_data_*` | 母数を増やす（期間延長、送信数増加） |
+| `no_significant_difference` | 期間を延長してデータを蓄積 |
+| `lift_below_threshold` | 実質的に同等。どちらを使っても可 |
+
+#### 運用サイクル（推奨）
+
+1. **週1回**: `report_ab_metrics.ts --include-decision` で状況確認
+2. **判定可能時**: `promote_winner.ts --dry-run` で確認
+3. **問題なければ**: `promote_winner.ts` で昇格実行
+4. **昇格後**: 新しいA/Bテストを設計（必要に応じて）
+
 ---
 
 ## 8. 連絡先
@@ -572,3 +668,4 @@ new_candidates_v1            | B       |     25 |   22 |       4 | 18.2%
 | 2026-01-26 | B案仕様追加（候補者経歴要約）、監査ログ、run_daily_queue CLI |
 | 2026-01-26 | P3-1: トラッキングID、A/Bテンプレート運用追加 |
 | 2026-01-26 | P3-2: Gmail送信/返信スキャン、A/Bメトリクスレポート追加 |
+| 2026-01-26 | P3-3: A/B勝者判定（z検定）、昇格機能、experiments.json追加 |
