@@ -574,6 +574,15 @@ A/Bテストの実験設定は `config/experiments.json` で管理します。
         "alpha": 0.05,
         "minLift": 0.02
       },
+      "status": "running",
+      "startAt": "2026-01-26T00:00:00.000Z",
+      "endAt": null,
+      "freezeOnLowN": true,
+      "rollbackRule": {
+        "maxDaysNoReply": 7,
+        "minSentTotal": 100,
+        "minReplyRate": 0.02
+      },
       "templates": [
         { "templateId": "new_candidates_v1_A", "variant": "A", "status": "active" },
         { "templateId": "new_candidates_v1_B", "variant": "B", "status": "active" }
@@ -592,6 +601,36 @@ A/Bテストの実験設定は `config/experiments.json` で管理します。
 | `decisionRule.alpha` | 有意水準（デフォルト: 0.05 = 5%） |
 | `decisionRule.minLift` | 勝者判定に必要な最小リフト（デフォルト: 0.02 = 2%） |
 | `templates[].status` | `active`（使用中）または `archived`（昇格後の敗者） |
+
+#### ライフサイクル管理フィールド（P3-7追加）
+
+| 項目 | 型 | 説明 |
+|------|-----|------|
+| `status` | `running` \| `paused` \| `ended` | 実験のステータス（デフォルト: `running`） |
+| `startAt` | ISO8601文字列 | 実験開始日時（この時刻前はA/B割当されない） |
+| `endAt` | ISO8601文字列 | 実験終了日時（この時刻以降はA/B割当されない） |
+| `freezeOnLowN` | boolean | 低サンプル時に凍結を推奨するか（デフォルト: `false`） |
+| `rollbackRule` | オブジェクト | ロールバック判定ルール |
+
+#### rollbackRule設定
+
+| 項目 | 型 | 説明 | デフォルト |
+|------|-----|------|-----------|
+| `maxDaysNoReply` | number | 返信なしでロールバック推奨になる日数 | 7 |
+| `minSentTotal` | number | ロールバック判定に必要な最小送信数 | 100 |
+| `minReplyRate` | number | 下回るとロールバック推奨になる返信率 | 0.02 (2%) |
+
+#### ステータス遷移
+
+```
+running → paused → running  # 一時停止→再開
+running → ended             # 終了（勝者昇格後など）
+running → paused → ended    # 一時停止→終了
+```
+
+- **running**: A/B割当の対象。`startAt` 〜 `endAt` の範囲内で有効
+- **paused**: A/B割当から除外。データ収集は継続
+- **ended**: 完全に終了。A/B割当なし、レポートのみ可能
 
 ### 7.8 A/B勝者判定と昇格（promote_winner）
 
@@ -934,9 +973,255 @@ Template Status:
 - **activeのみ割当対象**: ABAssignerは `status="active"` のテンプレートのみを使用します
 - **承認必須**: proposed → active への昇格は必ず `approve_templates.ts` を使用し、承認者・理由を記録してください
 
+### 7.13 統合運用CLI（run_ops）
+
+各運用タスクを統一インターフェースで実行できるCLIです。
+
+#### 基本使用法
+
+```bash
+# サブコマンドヘルプ
+npx ts-node src/cli/run_ops.ts --help
+
+# 各サブコマンドの実行
+npx ts-node src/cli/run_ops.ts <subcommand> [options]
+```
+
+#### サブコマンド一覧
+
+| サブコマンド | 説明 | 内部実行 |
+|--------------|------|----------|
+| `scan` | Gmail送信/返信スキャン | scan_gmail_responses.ts |
+| `report` | A/Bメトリクスレポート | report_ab_metrics.ts |
+| `propose` | テンプレート改善提案 | propose_templates.ts |
+| `promote` | 勝者昇格 | promote_winner.ts |
+| `approve` | テンプレート承認 | approve_templates.ts |
+| `safety` | 実験安全性チェック | ExperimentSafetyCheck |
+| `status` | 実験ステータス確認 | ExperimentScheduler |
+
+#### scan サブコマンド
+
+```bash
+# 全件スキャン
+npx ts-node src/cli/run_ops.ts scan
+
+# 特定日以降
+npx ts-node src/cli/run_ops.ts scan --since "2026-01-15"
+```
+
+#### report サブコマンド
+
+```bash
+# 基本レポート
+npx ts-node src/cli/run_ops.ts report
+
+# Markdown出力 + 判定結果
+npx ts-node src/cli/run_ops.ts report --markdown --include-decision
+
+# テンプレートステータス表示
+npx ts-node src/cli/run_ops.ts report --show-templates
+```
+
+#### propose サブコマンド
+
+```bash
+# 提案生成（ドライラン）
+npx ts-node src/cli/run_ops.ts propose --experiment "ab_subject_cta_v1" --since "2026-01-15" --dry-run
+
+# 提案実行
+npx ts-node src/cli/run_ops.ts propose --experiment "ab_subject_cta_v1" --since "2026-01-15"
+```
+
+#### promote サブコマンド
+
+```bash
+# 判定のみ（ドライラン）
+npx ts-node src/cli/run_ops.ts promote --experiment "ab_subject_cta_v1" --dry-run
+
+# 昇格実行
+npx ts-node src/cli/run_ops.ts promote --experiment "ab_subject_cta_v1"
+```
+
+#### approve サブコマンド
+
+```bash
+npx ts-node src/cli/run_ops.ts approve \
+  --experiment "ab_subject_cta_v1" \
+  --template-id "new_candidates_v1_B_add_urgency_abc123" \
+  --approved-by "山田太郎" \
+  --reason "南部セグメントで改善が期待できるため"
+```
+
+#### safety サブコマンド
+
+```bash
+# 全running実験をチェック
+npx ts-node src/cli/run_ops.ts safety
+
+# 特定実験のみ
+npx ts-node src/cli/run_ops.ts safety --experiment "ab_subject_cta_v1"
+
+# 特定期間のデータで判定
+npx ts-node src/cli/run_ops.ts safety --experiment "ab_subject_cta_v1" --since "2026-01-20"
+```
+
+#### status サブコマンド
+
+```bash
+# アクティブな実験を表示
+npx ts-node src/cli/run_ops.ts status
+
+# 全実験のステータス表示
+npx ts-node src/cli/run_ops.ts status --all
+```
+
+### 7.14 実験安全性チェック（ExperimentSafetyCheck）
+
+実験の健全性をチェックし、凍結/ロールバックを**推奨**します。
+
+**重要**: このチェックは推奨のみを行い、自動的な変更は行いません。
+
+#### 安全性アクション
+
+| アクション | 意味 | トリガー条件 |
+|------------|------|--------------|
+| `ok` | 問題なし | 全チェックパス |
+| `freeze_recommended` | 凍結推奨 | 低サンプル（freezeOnLowN=true時） |
+| `rollback_recommended` | ロールバック推奨 | 低返信率、長期間返信なし |
+| `review_recommended` | レビュー推奨 | その他の注意事項あり |
+
+#### チェック項目
+
+1. **低返信率**: 返信率が `rollbackRule.minReplyRate` 未満（送信数が `minSentTotal` 以上の場合）
+2. **長期間返信なし**: 最後の返信から `rollbackRule.maxDaysNoReply` 日以上経過
+3. **低サンプル**: 一定期間経過後も送信数が `minSentTotal` 未満（`freezeOnLowN=true` の場合のみ）
+
+#### 出力例
+
+```json
+{
+  "experimentId": "ab_subject_cta_v1",
+  "action": "rollback_recommended",
+  "reasons": [
+    "低返信率: 1.5% (閾値: 2%)",
+    "長期間返信なし: 10日間"
+  ],
+  "metrics": {
+    "totalSent": 150,
+    "totalReplies": 2,
+    "replyRate": 0.0133,
+    "daysSinceLastReply": 10
+  }
+}
+```
+
+#### 対処方法
+
+| アクション | 対処 |
+|------------|------|
+| `freeze_recommended` | 実験を一時停止し、サンプル蓄積を待つか、終了判断 |
+| `rollback_recommended` | 実験を終了し、前のテンプレートに戻す検討 |
+| `review_recommended` | 詳細を確認し、必要に応じて対処 |
+
 ---
 
-## 8. 連絡先
+## 8. 運用ルーチン
+
+### 8.1 日次ルーチン（毎日）
+
+```bash
+# 1. Gmail送信/返信スキャン（前日分）
+npx ts-node src/cli/run_ops.ts scan --since "$(date -v-1d +%Y-%m-%d)"
+
+# 2. 簡易レポート確認
+npx ts-node src/cli/run_ops.ts report --since "$(date -v-7d +%Y-%m-%d)"
+
+# 3. 安全性チェック
+npx ts-node src/cli/run_ops.ts safety
+```
+
+**確認ポイント**:
+- 送信/返信が正常に検出されているか
+- 返信率が異常に低くないか
+- 安全性チェックで警告がないか
+
+### 8.2 週次ルーチン（週1回）
+
+```bash
+# 1. 詳細レポート（Markdown出力）
+npx ts-node src/cli/run_ops.ts report --since "$(date -v-14d +%Y-%m-%d)" --markdown --include-decision > weekly_report.md
+
+# 2. セグメント別レポート
+npx ts-node src/cli/report_segment_metrics.ts --since "$(date -v-14d +%Y-%m-%d)" --markdown --include-decision >> weekly_report.md
+
+# 3. 改善提案生成（ドライラン）
+npx ts-node src/cli/run_ops.ts propose --experiment "ab_subject_cta_v1" --since "$(date -v-14d +%Y-%m-%d)" --dry-run
+
+# 4. 提案内容レビュー後、実行
+npx ts-node src/cli/run_ops.ts propose --experiment "ab_subject_cta_v1" --since "$(date -v-14d +%Y-%m-%d)"
+
+# 5. 提案されたテンプレートを承認（人間判断後）
+npx ts-node src/cli/run_ops.ts approve \
+  --experiment "ab_subject_cta_v1" \
+  --template-id "<提案されたID>" \
+  --approved-by "承認者名" \
+  --reason "承認理由"
+```
+
+**確認ポイント**:
+- A/Bテストの勝者判定が可能か
+- セグメント別に改善余地があるか
+- 提案されたテンプレートの内容が適切か
+
+### 8.3 月次/終了時ルーチン
+
+```bash
+# 1. 勝者判定（ドライラン）
+npx ts-node src/cli/run_ops.ts promote --experiment "ab_subject_cta_v1" --dry-run
+
+# 2. 判定結果確認後、昇格実行
+npx ts-node src/cli/run_ops.ts promote --experiment "ab_subject_cta_v1"
+
+# 3. 実験ステータス確認
+npx ts-node src/cli/run_ops.ts status --all
+```
+
+**確認ポイント**:
+- 統計的有意差が出ているか
+- 最小リフト（minLift）を超えているか
+- 昇格後は新しい実験を設計するか検討
+
+### 8.4 緊急時対応
+
+**返信率が急落した場合**:
+
+```bash
+# 1. 安全性チェック
+npx ts-node src/cli/run_ops.ts safety --experiment "ab_subject_cta_v1"
+
+# 2. rollback_recommended の場合
+# → experiments.json の status を "paused" に変更
+# → 原因調査後、終了または再開を判断
+```
+
+**実験を一時停止する場合**:
+
+```bash
+# experiments.json を編集
+# "status": "running" → "status": "paused"
+```
+
+**実験を終了する場合**:
+
+```bash
+# experiments.json を編集
+# "status": "running" → "status": "ended"
+# "endDate": "2026-01-26"
+```
+
+---
+
+## 9. 連絡先
 
 問題が解決しない場合は、以下を確認してください：
 
@@ -958,3 +1243,4 @@ Template Status:
 | 2026-01-26 | P3-4: セグメント別メトリクス、segments.json、探索的A/B判定追加 |
 | 2026-01-26 | P3-5: テンプレート改善提案自動生成（ImprovementPicker, TemplateGenerator, propose_templates CLI） |
 | 2026-01-26 | P3-6: テンプレート承認ワークフロー（TemplateQualityGate, approve_templates CLI, 承認ログ） |
+| 2026-01-26 | P3-7: 実験ライフサイクル管理（status, startAt, endAt, rollbackRule, ExperimentScheduler, ExperimentSafetyCheck, run_ops CLI, 日次/週次ルーチン） |

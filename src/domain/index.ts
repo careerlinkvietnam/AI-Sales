@@ -58,9 +58,20 @@ export {
   EvaluationDecision,
   SegmentedMetrics,
   SegmentedEvaluationDecision,
+  ExperimentStatus,
+  RollbackRule,
+  DEFAULT_ROLLBACK_RULE,
   getExperimentEvaluator,
   createTestExperimentEvaluator,
 } from './ExperimentEvaluator';
+export {
+  ExperimentScheduler,
+  ActiveExperimentResult,
+  SchedulerConfig,
+  createExperimentScheduler,
+  getExperimentScheduler,
+  resetExperimentScheduler,
+} from './ExperimentScheduler';
 export {
   Segmenter,
   SegmentClassification,

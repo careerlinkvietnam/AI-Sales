@@ -12,6 +12,13 @@
         "alpha": 0.05,
         "minLift": 0.02
       },
+      "status": "running",
+      "freezeOnLowN": true,
+      "rollbackRule": {
+        "maxDaysNoReply": 7,
+        "minSentTotal": 100,
+        "minReplyRate": 0.02
+      },
       "templates": [
         {
           "templateId": "new_candidates_v1_A",

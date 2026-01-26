@@ -249,12 +249,27 @@ let defaultStore: MetricsStore | null = null;
 
 /**
  * Get or create the default metrics store
+ * Respects METRICS_STORE_PATH environment variable
  */
 export function getMetricsStore(): MetricsStore {
   if (!defaultStore) {
-    defaultStore = new MetricsStore();
+    const envPath = process.env.METRICS_STORE_PATH;
+    if (envPath) {
+      const dir = path.dirname(envPath);
+      const file = path.basename(envPath);
+      defaultStore = new MetricsStore({ dataDir: dir, metricsFile: file });
+    } else {
+      defaultStore = new MetricsStore();
+    }
   }
   return defaultStore;
+}
+
+/**
+ * Reset the singleton for testing
+ */
+export function resetMetricsStore(): void {
+  defaultStore = null;
 }
 
 /**

@@ -46,6 +46,32 @@ export interface DecisionRule {
 }
 
 /**
+ * Experiment lifecycle status
+ */
+export type ExperimentStatus = 'running' | 'paused' | 'ended';
+
+/**
+ * Rollback rule for safety checks
+ */
+export interface RollbackRule {
+  /** Maximum days without any reply before recommending rollback */
+  maxDaysNoReply: number;
+  /** Minimum total sent before evaluating rollback */
+  minSentTotal: number;
+  /** Minimum reply rate threshold (below this triggers rollback recommendation) */
+  minReplyRate: number;
+}
+
+/**
+ * Default rollback rule
+ */
+export const DEFAULT_ROLLBACK_RULE: RollbackRule = {
+  maxDaysNoReply: 7,
+  minSentTotal: 100,
+  minReplyRate: 0.02,
+};
+
+/**
  * Experiment configuration
  */
 export interface ExperimentConfig {
@@ -58,6 +84,16 @@ export interface ExperimentConfig {
   minSentPerVariant: number;
   decisionRule: DecisionRule;
   templates: ExperimentTemplate[];
+  /** Experiment lifecycle status (default: running) */
+  status?: ExperimentStatus;
+  /** Scheduled start time in ISO format (optional, immediate if not set) */
+  startAt?: string;
+  /** Scheduled end time in ISO format (optional) */
+  endAt?: string;
+  /** Freeze experiment when sample size is too low (default: true) */
+  freezeOnLowN?: boolean;
+  /** Rollback rule for safety checks */
+  rollbackRule?: RollbackRule;
 }
 
 /**

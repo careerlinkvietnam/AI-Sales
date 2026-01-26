@@ -4,4 +4,5 @@ export {
   MetricEventType,
   getMetricsStore,
   createTestMetricsStore,
+  resetMetricsStore,
 } from './MetricsStore';
