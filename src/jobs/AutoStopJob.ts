@@ -17,6 +17,7 @@
 import { getMetricsStore, MetricsEvent } from '../data/MetricsStore';
 import { getAutoStopPolicy, AutoStopMetrics, DailyMetrics } from '../domain/AutoStopPolicy';
 import { getRuntimeKillSwitch } from '../domain/RuntimeKillSwitch';
+import { notifyAutoStopExecuted } from '../notifications';
 
 /**
  * Auto-stop job result
@@ -108,6 +109,19 @@ export function runAutoStopJob(options: AutoStopJobOptions = {}): AutoStopJobRes
     metricsStore.recordOpsStopSend({
       reason: `Auto-stop triggered: ${evaluation.reasons.join('; ')}`,
       setBy: 'auto_stop',
+    });
+
+    // Send notification (best effort, never throws)
+    notifyAutoStopExecuted({
+      reason: evaluation.reasons.join('; '),
+      counters: {
+        sent_3d: evaluation.metrics.totalSent,
+        reply_3d: evaluation.metrics.totalReplies,
+        blocked_3d: evaluation.metrics.totalBlocked,
+        reply_rate_3d: evaluation.metrics.replyRate ?? undefined,
+      },
+    }).catch(() => {
+      // Ignore notification failures - they are logged internally
     });
 
     stopped = true;

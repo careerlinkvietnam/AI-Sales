@@ -28,6 +28,14 @@ import { getRuntimeKillSwitch } from '../domain/RuntimeKillSwitch';
 import { getMetricsStore } from '../data/MetricsStore';
 import { getRampPolicy } from '../domain/RampPolicy';
 import { runAutoStopJob } from '../jobs/AutoStopJob';
+import {
+  getWebhookNotifier,
+  getNotificationRouter,
+  notifyOpsStopSend,
+  notifyOpsResumeSend,
+  notifyOpsRollback,
+  NotificationEvent,
+} from '../notifications';
 
 // Load environment variables
 config();
@@ -633,6 +641,12 @@ program
       setBy: opts.setBy,
     });
 
+    // Send notification (best effort)
+    notifyOpsStopSend({
+      reason: opts.reason,
+      setBy: opts.setBy,
+    }).catch(() => {});
+
     const state = killSwitch.getState();
 
     if (json) {
@@ -686,6 +700,12 @@ program
       reason: opts.reason,
       setBy: opts.setBy,
     });
+
+    // Send notification (best effort)
+    notifyOpsResumeSend({
+      reason: opts.reason,
+      setBy: opts.setBy,
+    }).catch(() => {});
 
     const newState = killSwitch.getState();
 
@@ -953,6 +973,100 @@ program
           console.log('Action: No action needed');
         }
       }
+    }
+  });
+
+// ============================================================
+// Subcommand: notify-test
+// ============================================================
+program
+  .command('notify-test')
+  .description('Send a test notification to verify webhook configuration')
+  .option('--severity <level>', 'Severity level (info, warn, error)', 'info')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    const webhookNotifier = getWebhookNotifier();
+    const router = getNotificationRouter();
+    const json = opts.json || false;
+    const severity = opts.severity as 'info' | 'warn' | 'error';
+
+    if (!webhookNotifier.isEnabled()) {
+      if (json) {
+        console.log(JSON.stringify({
+          success: false,
+          configured: false,
+          message: 'NOTIFY_WEBHOOK_URL is not configured',
+        }, null, 2));
+      } else {
+        console.log('='.repeat(60));
+        console.log('Notification Test');
+        console.log('='.repeat(60));
+        console.log('');
+        console.log('Status: NOT CONFIGURED');
+        console.log('');
+        console.log('NOTIFY_WEBHOOK_URL is not set.');
+        console.log('');
+        console.log('To configure notifications, set NOTIFY_WEBHOOK_URL in .env:');
+        console.log('  NOTIFY_WEBHOOK_URL=https://hooks.slack.com/services/...');
+      }
+      return;
+    }
+
+    // Build test event
+    const testEvent: NotificationEvent = {
+      timestamp: new Date().toISOString(),
+      type: 'OPS_STOP_SEND', // Use a valid type for test
+      severity,
+      reason: `Test notification (severity: ${severity})`,
+      meta: {
+        test: true,
+        source: 'notify-test',
+      },
+    };
+
+    try {
+      const sent = await router.notify(testEvent);
+
+      if (json) {
+        console.log(JSON.stringify({
+          success: true,
+          configured: true,
+          sent,
+          webhookUrl: webhookNotifier.getWebhookUrlMasked(),
+          event: testEvent,
+        }, null, 2));
+      } else {
+        console.log('='.repeat(60));
+        console.log('Notification Test');
+        console.log('='.repeat(60));
+        console.log('');
+        console.log('Status: CONFIGURED');
+        console.log(`Webhook URL: ${webhookNotifier.getWebhookUrlMasked()}`);
+        console.log('');
+        if (sent) {
+          console.log('Test notification sent successfully!');
+        } else {
+          console.log('Test notification was rate-limited (try again later).');
+        }
+        console.log('');
+        console.log('Event details:');
+        console.log(`  Type: ${testEvent.type}`);
+        console.log(`  Severity: ${testEvent.severity}`);
+        console.log(`  Reason: ${testEvent.reason}`);
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      if (json) {
+        console.log(JSON.stringify({
+          success: false,
+          configured: true,
+          error: errorMsg,
+        }, null, 2));
+      } else {
+        console.error('Test notification failed:');
+        console.error(`  ${errorMsg}`);
+      }
+      process.exit(1);
     }
   });
 

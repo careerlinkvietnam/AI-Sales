@@ -25,6 +25,7 @@ import * as path from 'path';
 import { ExperimentEvaluator, ExperimentsRegistry } from '../domain/ExperimentEvaluator';
 import { getRuntimeKillSwitch } from '../domain/RuntimeKillSwitch';
 import { getMetricsStore } from '../data/MetricsStore';
+import { notifyOpsRollback } from '../notifications';
 
 // Load environment variables
 config();
@@ -148,6 +149,16 @@ function rollbackExperiment(options: {
     reason,
     setBy,
     stoppedSending,
+  });
+
+  // Send notification (best effort, never throws)
+  notifyOpsRollback({
+    experimentId,
+    reason,
+    setBy,
+    stoppedSending,
+  }).catch(() => {
+    // Ignore notification failures - they are logged internally
   });
 
   return {

@@ -35,6 +35,11 @@ import { getApprovalTokenManager } from '../domain/ApprovalToken';
 import { getMetricsStore, SendBlockedReason } from '../data/MetricsStore';
 import { getDraftRegistry } from '../data/DraftRegistry';
 import { getRampPolicy } from '../domain/RampPolicy';
+import {
+  notifyAutoSendSuccess,
+  notifyAutoSendBlocked,
+  notifyRampLimited,
+} from '../notifications';
 
 interface SendDraftOptions {
   draftId: string;
@@ -116,6 +121,15 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
       recipientDomain,
     });
 
+    // Send notification (best effort)
+    notifyAutoSendBlocked({
+      trackingId,
+      companyId,
+      reason: 'Draft not in registry',
+      templateId,
+      abVariant: abVariant || undefined,
+    }).catch(() => {});
+
     return {
       success: false,
       sent: false,
@@ -140,6 +154,15 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
       details: policyResult.details,
       recipientDomain,
     });
+
+    // Send notification (best effort)
+    notifyAutoSendBlocked({
+      trackingId,
+      companyId,
+      reason: policyResult.reason || 'Policy check failed',
+      templateId,
+      abVariant: abVariant || undefined,
+    }).catch(() => {});
 
     return {
       success: false,
@@ -169,6 +192,14 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
         recipientDomain,
       });
 
+      // Send notification (best effort)
+      notifyRampLimited({
+        trackingId,
+        companyId,
+        reason: rampCheck.reason || 'Daily cap reached',
+        counters: { today_sent: todayCount },
+      }).catch(() => {});
+
       return {
         success: false,
         sent: false,
@@ -182,6 +213,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
 
     // Check percentage mode company eligibility
     if (rampPolicy.getMode() === 'percentage' && !rampPolicy.shouldAutoSendForCompany(companyId)) {
+      const rampReason = `Company not in ${(rampPolicy.getPercentage() * 100).toFixed(0)}% auto-send group`;
       metricsStore.recordAutoSendBlocked({
         trackingId,
         companyId,
@@ -189,9 +221,16 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
         abVariant,
         draftId: options.draftId,
         reason: 'ramp_limited',
-        details: `Company not in ${(rampPolicy.getPercentage() * 100).toFixed(0)}% auto-send group`,
+        details: rampReason,
         recipientDomain,
       });
+
+      // Send notification (best effort)
+      notifyRampLimited({
+        trackingId,
+        companyId,
+        reason: rampReason,
+      }).catch(() => {});
 
       return {
         success: false,
@@ -219,6 +258,15 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
       recipientDomain,
     });
 
+    // Send notification (best effort)
+    notifyAutoSendBlocked({
+      trackingId,
+      companyId,
+      reason: 'Invalid approval token',
+      templateId,
+      abVariant: abVariant || undefined,
+    }).catch(() => {});
+
     return {
       success: false,
       sent: false,
@@ -244,6 +292,15 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
       recipientDomain,
     });
 
+    // Send notification (best effort)
+    notifyAutoSendBlocked({
+      trackingId,
+      companyId,
+      reason: 'Token/draft mismatch',
+      templateId,
+      abVariant: abVariant || undefined,
+    }).catch(() => {});
+
     return {
       success: false,
       sent: false,
@@ -267,6 +324,15 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
       details: `Token trackingId (${tokenPayload.trackingId}) does not match registry trackingId (${trackingId})`,
       recipientDomain,
     });
+
+    // Send notification (best effort)
+    notifyAutoSendBlocked({
+      trackingId,
+      companyId,
+      reason: 'Token/tracking mismatch',
+      templateId,
+      abVariant: abVariant || undefined,
+    }).catch(() => {});
 
     return {
       success: false,
@@ -298,6 +364,15 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
         details: gateResult.violations.join('; '),
         recipientDomain,
       });
+
+      // Send notification (best effort) - don't include violation details (may contain PII)
+      notifyAutoSendBlocked({
+        trackingId,
+        companyId,
+        reason: 'PreSendGate check failed',
+        templateId,
+        abVariant: abVariant || undefined,
+      }).catch(() => {});
 
       return {
         success: false,
@@ -340,6 +415,14 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
       recipientDomain,
     });
 
+    // Send notification (best effort)
+    notifyAutoSendSuccess({
+      trackingId,
+      companyId,
+      templateId,
+      abVariant: abVariant || undefined,
+    }).catch(() => {});
+
     return {
       success: true,
       sent: true,
@@ -362,6 +445,15 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
       details: `Send failed: ${errorMessage}`,
       recipientDomain,
     });
+
+    // Send notification (best effort) - mask error message for PII safety
+    notifyAutoSendBlocked({
+      trackingId,
+      companyId,
+      reason: 'Send failed',
+      templateId,
+      abVariant: abVariant || undefined,
+    }).catch(() => {});
 
     return {
       success: false,

@@ -1787,6 +1787,120 @@ npx ts-node src/cli/run_ops.ts resume-send \
 
 **重要**: 自動停止後の再開は常に人間が判断して `resume-send` を実行してください。自動再開は行われません。
 
+### 7.23 運用イベント通知（Webhook）
+
+運用上の重要イベントを外部Webhookに通知します（Slack Incoming Webhook互換）。
+
+#### 設定
+
+```bash
+# .env に追加
+NOTIFY_WEBHOOK_URL=https://hooks.slack.com/services/T00/B00/xxxx
+```
+
+**注意**: `NOTIFY_WEBHOOK_URL` が設定されていない場合、通知は送信されません（オプトイン設計）。
+
+#### 通知イベントタイプ
+
+| イベント | 重要度 | 発生タイミング |
+|----------|--------|----------------|
+| `AUTO_STOP_EXECUTED` | error | 自動停止が実行された時 |
+| `OPS_STOP_SEND` | warn | `stop-send` コマンド実行時 |
+| `OPS_RESUME_SEND` | info | `resume-send` コマンド実行時 |
+| `OPS_ROLLBACK` | error | 実験ロールバック実行時 |
+| `AUTO_SEND_SUCCESS` | info | 自動送信成功時 |
+| `AUTO_SEND_BLOCKED` | warn | 自動送信ブロック時 |
+| `SEND_APPROVED` | info | 送信承認時 |
+| `RAMP_LIMITED` | info | 段階リリース制限でブロック時 |
+
+#### PII保護
+
+通知に含まれる情報は**PIIを含みません**：
+
+**含まれる情報**:
+- イベントタイプ、重要度、タイムスタンプ
+- 識別子（tracking_id, company_id, experiment_id, template_id）
+- 集計メトリクス（sent_3d, reply_3d, blocked_3d, reply_rate_3d）
+- ブロック/停止理由
+
+**含まれない情報（PII禁止）**:
+- メールアドレス
+- メール本文
+- 候補者の経歴要約
+- 企業名
+- 候補者名
+
+#### レート制限（spam防止）
+
+同一タイプ+理由+企業の通知は**10分間**に1回に制限されます。
+
+**例外（常に通知）**:
+- `AUTO_STOP_EXECUTED`
+- `OPS_STOP_SEND`
+- `OPS_RESUME_SEND`
+- `OPS_ROLLBACK`
+
+#### notify-test サブコマンド
+
+Webhook接続をテストします。
+
+```bash
+# テスト通知を送信
+npx ts-node src/cli/run_ops.ts notify-test
+
+# JSON出力
+npx ts-node src/cli/run_ops.ts notify-test --json
+```
+
+**出力例**:
+
+```
+============================================================
+Webhook Notification Test
+============================================================
+
+Webhook URL: https://hooks.slack.com/***
+Status: ENABLED
+
+Sending test notification...
+Result: SUCCESS
+
+Test notification sent successfully.
+```
+
+#### 通知失敗時の動作
+
+- 通知失敗は**メイン処理を中断しません**（best effort）
+- 失敗は `data/notify_failures.ndjson` にログされます
+- シークレット（URL等）はエラーログでマスクされます
+
+#### 失敗ログの確認
+
+```bash
+# 失敗ログを確認
+cat data/notify_failures.ndjson | jq .
+```
+
+**出力例**:
+
+```json
+{
+  "timestamp": "2026-01-26T10:00:00.000Z",
+  "eventType": "AUTO_STOP_EXECUTED",
+  "errorMessage": "Webhook returned status 500: ***",
+  "attemptId": "1706270400000-abc123"
+}
+```
+
+#### Slack通知のフォーマット例
+
+```
+🚨 [AUTO_STOP_EXECUTED]
+Reason: Reply rate too low: 1.33% (min: 1.5%); 2 consecutive days with poor metrics
+Metrics: sent_3d=150, reply_3d=2, blocked_3d=10, reply_rate_3d=1.3%
+Time: 2026-01-26T10:00:00.000Z
+```
+
 ### 7.17 推奨送信ワークフロー
 
 下書き作成から送信までの推奨フローです。
@@ -2052,3 +2166,4 @@ npx ts-node src/cli/run_ops.ts rollback \
 | 2026-01-26 | P4-2: 承認→送信ワンコマンド化 - DraftRegistry, approve_send CLI, approve-send サブコマンド、tracking_id紐付け強制 |
 | 2026-01-26 | P4-3: 緊急停止とロールバック - RuntimeKillSwitch, stop-send/resume-send/stop-status/rollback サブコマンド, rollback_experiment CLI, OPS_STOP_SEND/OPS_RESUME_SEND/OPS_ROLLBACK メトリクス |
 | 2026-01-26 | P4-4: 段階リリースと自動停止 - RampPolicy, AutoStopPolicy, AutoStopJob, ramp-status/auto-stop サブコマンド, ramp_limited ブロック理由追加 |
+| 2026-01-26 | P4-5: 運用イベント通知 - WebhookNotifier, NotificationRouter, notify-test サブコマンド, PII-free通知設計 |
