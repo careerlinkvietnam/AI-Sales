@@ -37,15 +37,25 @@ export type ValidReasonTag = (typeof VALID_REASON_TAGS)[number];
 
 /**
  * Valid evidenceFields patterns for candidate rationale
- * References fields from company profile used as matching evidence
+ * References fields from company profile or candidate data used as matching evidence
  */
 export const VALID_EVIDENCE_PATTERNS = [
+  // Company fields
   'company.location.region',
   'company.location.province',
   'company.industryText',
   'company.tags',
   'company.companyId',
   'company.profile',
+  // Candidate fields (for careerSummary synthesis tracking)
+  'candidate.careerSummary',
+  'candidate.jobTitle',
+  'candidate.yearsOfExperience',
+  'candidate.industryExperience',
+  'candidate.keySkills',
+  'candidate.location',
+  'candidate.availability',
+  'candidate.headline',
 ] as const;
 
 export type ValidEvidencePattern = (typeof VALID_EVIDENCE_PATTERNS)[number];

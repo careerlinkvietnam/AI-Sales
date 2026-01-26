@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://careerlink.vn/schemas/candidate.json",
   "title": "Candidate Schema",
-  "description": "Candidate recommendation with rationale",
+  "description": "Candidate recommendation with rationale and career summary (B案仕様)",
   "definitions": {
     "CandidateRationale": {
       "type": "object",
@@ -11,19 +11,21 @@
         "reasonTags": {
           "type": "array",
           "items": { "type": "string" },
+          "minItems": 1,
           "description": "Tags explaining match reasons (e.g., '勤務地一致', '業界近似', '職種一致')"
         },
         "evidenceFields": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Source fields used for matching (e.g., 'company.location.region', 'company.industryText')"
+          "minItems": 1,
+          "description": "Source fields used for matching (e.g., 'company.location.region', 'company.industryText', 'candidate.careerSummary')"
         }
       },
       "required": ["reasonTags", "evidenceFields"]
     },
     "Candidate": {
       "type": "object",
-      "description": "A candidate recommendation",
+      "description": "A candidate recommendation with career summary",
       "properties": {
         "candidateId": {
           "type": "string",
@@ -32,6 +34,12 @@
         "headline": {
           "type": "string",
           "description": "Brief summary of role/experience (no PII)"
+        },
+        "careerSummary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400,
+          "description": "Short career summary (200-300 chars typical, max 400). Must not contain PII (email, phone, address, birthdate)."
         },
         "keySkills": {
           "type": "array",
@@ -46,12 +54,25 @@
           "type": ["string", "null"],
           "description": "Availability status"
         },
+        "yearsOfExperience": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Total years of relevant experience"
+        },
+        "jobTitle": {
+          "type": ["string", "null"],
+          "description": "Current or most recent job title (no company name)"
+        },
+        "industryExperience": {
+          "type": ["string", "null"],
+          "description": "Industry experience summary"
+        },
         "rationale": {
           "$ref": "#/definitions/CandidateRationale",
           "description": "Why this candidate matches"
         }
       },
-      "required": ["candidateId", "headline", "keySkills", "rationale"]
+      "required": ["candidateId", "headline", "careerSummary", "keySkills", "rationale"]
     },
     "CandidateSearchResult": {
       "type": "object",
@@ -66,9 +87,13 @@
         "searchCriteria": {
           "type": "object",
           "additionalProperties": { "type": "string" }
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["stub", "real"]
         }
       },
-      "required": ["candidates"]
+      "required": ["candidates", "mode"]
     }
   }
 }

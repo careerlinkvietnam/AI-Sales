@@ -188,7 +188,7 @@ export interface CompanyProfile {
 }
 
 // ============================================================
-// Candidate Types
+// Candidate Types (B案仕様: career_summary含む)
 // ============================================================
 
 export interface CandidateRationale {
@@ -199,9 +199,17 @@ export interface CandidateRationale {
 export interface Candidate {
   candidateId: string;
   headline: string;
+  /** 経歴要約（200-300文字程度、最大400文字）。PIIを含めない */
+  careerSummary: string;
   keySkills: string[];
   location?: string | null;
   availability?: string | null;
+  /** 経験年数 */
+  yearsOfExperience?: number | null;
+  /** 現職/直近の職種（会社名は含めない） */
+  jobTitle?: string | null;
+  /** 業界経験 */
+  industryExperience?: string | null;
   rationale: CandidateRationale;
 }
 

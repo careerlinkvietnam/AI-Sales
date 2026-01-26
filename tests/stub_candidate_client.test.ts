@@ -78,12 +78,15 @@ describe('StubCandidateClient', () => {
       expect(result.searchCriteria.region).toBe('南部');
     });
 
-    test('candidates have required fields', async () => {
+    test('candidates have required fields including careerSummary', async () => {
       const result = await client.searchCandidates(mockProfile);
 
       result.candidates.forEach(candidate => {
         expect(candidate.candidateId).toBeDefined();
         expect(candidate.headline).toBeDefined();
+        expect(candidate.careerSummary).toBeDefined();
+        expect(candidate.careerSummary.length).toBeGreaterThan(0);
+        expect(candidate.careerSummary.length).toBeLessThanOrEqual(400);
         expect(candidate.keySkills).toBeDefined();
         expect(Array.isArray(candidate.keySkills)).toBe(true);
         expect(candidate.rationale).toBeDefined();
@@ -141,6 +144,7 @@ describe('StubCandidateClient', () => {
       const invalidCandidate = {
         candidateId: 'INVALID',
         headline: 'Test',
+        careerSummary: 'テスト経歴要約',
         keySkills: [],
         rationale: {
           reasonTags: ['INVALID_TAG'],

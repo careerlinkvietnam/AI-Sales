@@ -48,30 +48,32 @@ describe('EmailComposer', () => {
   }
 
   /**
-   * Helper to create test candidates
+   * Helper to create test candidates (B案仕様: careerSummary含む)
    */
   function createTestCandidates(): Candidate[] {
     return [
       {
         candidateId: 'C001',
         headline: '製造業経験10年のプロダクションマネージャー',
+        careerSummary: '日系製造企業にて10年間、生産管理およびプロダクションマネジメントを担当。品質管理システムの導入により不良率を30%削減。',
         keySkills: ['生産管理', '品質管理'],
         location: '南部',
         availability: '即日可能',
         rationale: {
           reasonTags: ['業界経験一致', '勤務地一致'],
-          evidenceFields: ['company.industryText'],
+          evidenceFields: ['company.industryText', 'candidate.careerSummary'],
         },
       },
       {
         candidateId: 'C002',
         headline: 'IT企業出身のプロジェクトマネージャー',
+        careerSummary: 'IT企業にて7年間、システム開発プロジェクトのマネジメントを担当。アジャイル開発手法を導入し、プロジェクト納期遵守率を95%に向上。',
         keySkills: ['プロジェクト管理', 'アジャイル'],
         location: '南部',
         availability: '1ヶ月後',
         rationale: {
           reasonTags: ['マネジメント経験'],
-          evidenceFields: [],
+          evidenceFields: ['candidate.careerSummary'],
         },
       },
     ];
@@ -277,12 +279,13 @@ describe('EmailComposer', () => {
         {
           candidateId: 'C001',
           headline: 'テスト候補者',
+          careerSummary: 'テスト用の経歴要約です。',
           keySkills: ['スキル1'],
           location: null,
           availability: '即日可能',
           rationale: {
-            reasonTags: ['理由1'],
-            evidenceFields: [],
+            reasonTags: ['即戦力'],
+            evidenceFields: ['candidate.careerSummary'],
           },
         },
       ];
@@ -300,12 +303,13 @@ describe('EmailComposer', () => {
         {
           candidateId: 'C001',
           headline: 'テスト候補者',
+          careerSummary: 'テスト用の経歴要約です。',
           keySkills: ['スキル1'],
           location: '南部',
           availability: null,
           rationale: {
             reasonTags: [],
-            evidenceFields: [],
+            evidenceFields: ['candidate.careerSummary'],
           },
         },
       ];
@@ -322,12 +326,13 @@ describe('EmailComposer', () => {
         {
           candidateId: 'C001',
           headline: 'テスト候補者',
+          careerSummary: 'テスト用の経歴要約です。',
           keySkills: [],
           location: '南部',
           availability: '即日可能',
           rationale: {
-            reasonTags: ['理由1'],
-            evidenceFields: [],
+            reasonTags: ['即戦力'],
+            evidenceFields: ['candidate.careerSummary'],
           },
         },
       ];
