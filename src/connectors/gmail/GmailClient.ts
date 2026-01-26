@@ -1,7 +1,10 @@
 /**
- * Gmail Client for Draft Creation
+ * Gmail Client for Draft Creation and Message Search
  *
- * IMPORTANT: This client only supports draft creation.
+ * IMPORTANT: This client supports:
+ * - Draft creation
+ * - Sent/Reply message search (for tracking)
+ *
  * Send functionality is intentionally NOT implemented.
  * All emails must be reviewed by humans before sending.
  *
@@ -12,6 +15,32 @@
  */
 
 import { GmailDraftResult, ConfigurationError } from '../../types';
+
+/**
+ * Gmail message search result
+ */
+export interface GmailSearchResult {
+  /** Thread ID */
+  threadId: string;
+  /** Message ID */
+  messageId: string;
+  /** Internal date (Unix timestamp in ms) */
+  internalDate: number;
+  /** ISO date string */
+  dateIso: string;
+}
+
+/**
+ * Gmail thread metadata
+ */
+export interface GmailThreadMetadata {
+  /** Thread ID */
+  threadId: string;
+  /** Number of messages in thread */
+  messageCount: number;
+  /** Last message date (ISO) */
+  lastMessageDate: string;
+}
 
 /**
  * Validate Gmail configuration
@@ -84,9 +113,189 @@ export class GmailClient {
     return this.isStub;
   }
 
+  /**
+   * Search for a sent message by tracking ID
+   *
+   * @param trackingId - The tracking ID (e.g., "a1b2c3d4")
+   * @returns Search result or null if not found
+   */
+  async searchSentByTrackingId(trackingId: string): Promise<GmailSearchResult | null> {
+    if (this.isStub) {
+      return this.stubSearchSent(trackingId);
+    }
+
+    validateGmailConfig();
+    await this.ensureAccessToken();
+
+    // Search in sent folder for the tracking tag
+    // Use quotes to search for exact phrase
+    const query = `in:sent "[CL-AI:${trackingId}]"`;
+    return this.searchMessages(query);
+  }
+
+  /**
+   * Search for inbox replies by tracking ID
+   *
+   * @param trackingId - The tracking ID (e.g., "a1b2c3d4")
+   * @returns Search result or null if not found
+   */
+  async searchInboxRepliesByTrackingId(trackingId: string): Promise<GmailSearchResult | null> {
+    if (this.isStub) {
+      return this.stubSearchReply(trackingId);
+    }
+
+    validateGmailConfig();
+    await this.ensureAccessToken();
+
+    // Search in inbox for messages containing the tracking tag
+    // These would be replies from the recipient
+    const query = `in:inbox "[CL-AI:${trackingId}]"`;
+    return this.searchMessages(query);
+  }
+
+  /**
+   * Get thread metadata (message count, last message date)
+   *
+   * @param threadId - Gmail thread ID
+   * @returns Thread metadata or null if not found
+   */
+  async getThreadMetadata(threadId: string): Promise<GmailThreadMetadata | null> {
+    if (this.isStub) {
+      return this.stubGetThreadMetadata(threadId);
+    }
+
+    validateGmailConfig();
+    await this.ensureAccessToken();
+
+    try {
+      const response = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=metadata&metadataHeaders=Date`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error(`Failed to get thread: HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as {
+        id: string;
+        messages: Array<{ id: string; internalDate: string }>;
+      };
+
+      const messageCount = data.messages.length;
+      const lastMessage = data.messages[data.messages.length - 1];
+      const lastMessageDate = new Date(parseInt(lastMessage.internalDate, 10)).toISOString();
+
+      return {
+        threadId: data.id,
+        messageCount,
+        lastMessageDate,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   // ============================================================
   // Private Methods
   // ============================================================
+
+  /**
+   * Search messages using Gmail API query
+   */
+  private async searchMessages(query: string): Promise<GmailSearchResult | null> {
+    try {
+      const encodedQuery = encodeURIComponent(query);
+      const response = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodedQuery}&maxResults=1`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Search failed: HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as {
+        messages?: Array<{ id: string; threadId: string }>;
+      };
+
+      if (!data.messages || data.messages.length === 0) {
+        return null;
+      }
+
+      // Get message metadata (NOT body) for the internal date
+      const messageId = data.messages[0].id;
+      const metadataResponse = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=metadata`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+          },
+        }
+      );
+
+      if (!metadataResponse.ok) {
+        throw new Error(`Failed to get message metadata: HTTP ${metadataResponse.status}`);
+      }
+
+      const messageData = await metadataResponse.json() as {
+        id: string;
+        threadId: string;
+        internalDate: string;
+      };
+
+      const internalDate = parseInt(messageData.internalDate, 10);
+
+      return {
+        threadId: messageData.threadId,
+        messageId: messageData.id,
+        internalDate,
+        dateIso: new Date(internalDate).toISOString(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Stub: Search sent by tracking ID
+   */
+  private stubSearchSent(trackingId: string): GmailSearchResult | null {
+    // In stub mode, simulate not finding sent messages
+    // Tests can override this behavior
+    console.log(`[Gmail Stub] searchSentByTrackingId: ${trackingId}`);
+    return null;
+  }
+
+  /**
+   * Stub: Search reply by tracking ID
+   */
+  private stubSearchReply(trackingId: string): GmailSearchResult | null {
+    // In stub mode, simulate not finding replies
+    console.log(`[Gmail Stub] searchInboxRepliesByTrackingId: ${trackingId}`);
+    return null;
+  }
+
+  /**
+   * Stub: Get thread metadata
+   */
+  private stubGetThreadMetadata(threadId: string): GmailThreadMetadata | null {
+    console.log(`[Gmail Stub] getThreadMetadata: ${threadId}`);
+    return {
+      threadId,
+      messageCount: 1,
+      lastMessageDate: new Date().toISOString(),
+    };
+  }
 
   /**
    * Create a stub draft (for testing without Gmail)

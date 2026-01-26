@@ -424,6 +424,134 @@ tail -10 logs/audit.ndjson | jq .
 - 企業の連絡先メール
 - メール本文全体
 
+### 7.4 計測データ（metrics.ndjson）
+
+送信/返信の効果測定データは `data/metrics.ndjson` に記録されます。
+
+**イベントタイプ**:
+- `DRAFT_CREATED`: 下書き作成時
+- `SENT_DETECTED`: Gmail送信検出時
+- `REPLY_DETECTED`: 返信検出時
+
+**記録される情報**:
+- タイムスタンプ
+- トラッキングID
+- 企業ID
+- テンプレートID
+- A/Bバリアント
+- GmailスレッドID
+- 返信レイテンシ（時間）
+
+**記録されない情報（PII禁止）**:
+- メールアドレス
+- メール本文
+- 候補者の経歴要約（careerSummary）
+- 企業名
+- 候補者名
+
+**注意**: data/ ディレクトリは .gitignore に含まれています。
+
+### 7.5 Gmail送信/返信スキャン
+
+監査ログからトラッキングIDを取得し、Gmailで送信済み・返信を検出します。
+
+**重要**: 送信は手動で行います。送信検出は本スキャンで自動的に行われます。
+
+#### 実行方法
+
+```bash
+# 基本実行
+npx ts-node src/cli/scan_gmail_responses.ts
+
+# 特定日以降のみスキャン
+npx ts-node src/cli/scan_gmail_responses.ts --since "2026-01-15"
+
+# JSON出力
+npx ts-node src/cli/scan_gmail_responses.ts --json
+```
+
+#### オプション
+
+| オプション | 説明 | デフォルト |
+|------------|------|-----------|
+| `--since <date>` | この日付以降の監査ログをスキャン | 全件 |
+| `--json` | JSON出力のみ | false |
+
+#### 出力例
+
+```json
+{
+  "processed": 25,
+  "skipped": 3,
+  "sentDetected": 18,
+  "replyDetected": 5,
+  "errors": []
+}
+```
+
+#### 動作モード
+
+- **Gmail Stub Mode**: `GMAIL_*` 環境変数が未設定の場合、スキャンをスキップします
+- **Real Mode**: Gmail APIで実際に検索を実行します
+
+### 7.6 A/Bメトリクスレポート
+
+テンプレート/バリアント別の効果測定レポートを生成します。
+
+#### 実行方法
+
+```bash
+# 基本実行（全期間）
+npx ts-node src/cli/report_ab_metrics.ts
+
+# 特定日以降のデータのみ
+npx ts-node src/cli/report_ab_metrics.ts --since "2026-01-01"
+
+# JSON出力
+npx ts-node src/cli/report_ab_metrics.ts --json
+```
+
+#### オプション
+
+| オプション | 説明 | デフォルト |
+|------------|------|-----------|
+| `--since <date>` | この日付以降のイベントのみ | 全件 |
+| `--json` | JSON出力のみ | false |
+
+#### 出力例（テーブル形式）
+
+```
+======================================================================
+A/B Metrics Report
+======================================================================
+
+Period:
+  From: 2026-01-01
+  To:   2026-01-26T10:00:00.000Z
+
+Overall Metrics:
+----------------------------------------
+  Drafts created:      50
+  Sent (detected):     45
+  Replies (detected):  12
+  Reply rate:          26.7%
+  Median reply time:   18.5h
+
+By Template/Variant:
+----------------------------------------------------------------------
+Template ID                  | Variant | Drafts | Sent | Replies | Rate
+----------------------------------------------------------------------
+new_candidates_v1            | A       |     25 |   23 |       8 | 34.8%
+new_candidates_v1            | B       |     25 |   22 |       4 | 18.2%
+----------------------------------------------------------------------
+```
+
+#### 計算ロジック
+
+- **返信率**: `replies / sent_detected`（draftは分母にしない）
+- **中央値レイテンシ**: 返信検出時に計算された `replyLatencyHours` の中央値
+- **バリアント比較**: 同一テンプレートのA/Bを並べて表示
+
 ---
 
 ## 8. 連絡先
@@ -443,3 +571,4 @@ tail -10 logs/audit.ndjson | jq .
 | 2026-01-26 | 初版作成 |
 | 2026-01-26 | B案仕様追加（候補者経歴要約）、監査ログ、run_daily_queue CLI |
 | 2026-01-26 | P3-1: トラッキングID、A/Bテンプレート運用追加 |
+| 2026-01-26 | P3-2: Gmail送信/返信スキャン、A/Bメトリクスレポート追加 |
