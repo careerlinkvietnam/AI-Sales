@@ -23,6 +23,7 @@ import { spawn, SpawnOptions } from 'child_process';
 import * as path from 'path';
 import { ExperimentSafetyCheck } from '../jobs/ExperimentSafetyCheck';
 import { ExperimentScheduler } from '../domain/ExperimentScheduler';
+import { getSendPolicy } from '../domain/SendPolicy';
 
 // Load environment variables
 config();
@@ -345,6 +346,79 @@ program
         );
       }
       console.log('-'.repeat(70));
+    }
+  });
+
+// ============================================================
+// Subcommand: send
+// ============================================================
+program
+  .command('send')
+  .description('Send a draft email (requires ENABLE_AUTO_SEND=true)')
+  .requiredOption('--draft-id <id>', 'Gmail draft ID')
+  .requiredOption('--to <email>', 'Recipient email address')
+  .requiredOption('--approval-token <token>', 'Approval token')
+  .option('--tracking-id <id>', 'Tracking ID for metrics')
+  .option('--company-id <id>', 'Company ID for metrics')
+  .option('--template-id <id>', 'Template ID for metrics')
+  .option('--ab-variant <variant>', 'A/B variant (A or B)')
+  .option('--subject <subject>', 'Email subject for PreSendGate check')
+  .option('--body <body>', 'Email body for PreSendGate check')
+  .option('--dry-run', 'Check without sending')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    // Quick check: if sending is not enabled, fail fast
+    const policy = getSendPolicy();
+    if (!policy.isSendingEnabled()) {
+      const config = policy.getConfig();
+      if (opts.json) {
+        console.log(
+          JSON.stringify({
+            success: false,
+            blocked: true,
+            reason: config.killSwitch ? 'kill_switch' : 'not_enabled',
+            details: config.killSwitch
+              ? 'Emergency kill switch is active'
+              : 'ENABLE_AUTO_SEND is not set to true',
+          }, null, 2)
+        );
+      } else {
+        console.error('Send blocked:');
+        console.error(
+          config.killSwitch
+            ? '  KILL_SWITCH is active - sending disabled'
+            : '  ENABLE_AUTO_SEND is not set to true'
+        );
+        console.error('');
+        console.error('To enable sending:');
+        console.error('  1. Set ENABLE_AUTO_SEND=true in .env');
+        console.error('  2. Configure SEND_ALLOWLIST_DOMAINS or SEND_ALLOWLIST_EMAILS');
+        console.error('  3. Optionally set SEND_MAX_PER_DAY (default: 20)');
+      }
+      process.exit(1);
+    }
+
+    console.log('Running: send_draft');
+    console.log('');
+
+    const args: string[] = [];
+    args.push('--draft-id', opts.draftId);
+    args.push('--to', opts.to);
+    args.push('--approval-token', opts.approvalToken);
+    if (opts.trackingId) args.push('--tracking-id', opts.trackingId);
+    if (opts.companyId) args.push('--company-id', opts.companyId);
+    if (opts.templateId) args.push('--template-id', opts.templateId);
+    if (opts.abVariant) args.push('--ab-variant', opts.abVariant);
+    if (opts.subject) args.push('--subject', opts.subject);
+    if (opts.body) args.push('--body', opts.body);
+    if (opts.dryRun) args.push('--dry-run');
+    if (opts.json) args.push('--json');
+
+    try {
+      await execCli('send_draft', args);
+    } catch (error) {
+      console.error('Send failed:', (error as Error).message);
+      process.exit(1);
     }
   });
 

@@ -1,12 +1,17 @@
 /**
- * Gmail Client for Draft Creation and Message Search
+ * Gmail Client for Draft Creation, Sending, and Message Search
  *
  * IMPORTANT: This client supports:
  * - Draft creation
+ * - Draft sending (P4-1: limited pilot with strict safety controls)
  * - Sent/Reply message search (for tracking)
  *
- * Send functionality is intentionally NOT implemented.
- * All emails must be reviewed by humans before sending.
+ * Send functionality is gated by:
+ * - ENABLE_AUTO_SEND flag
+ * - KILL_SWITCH (emergency stop)
+ * - Allowlist (domain/email)
+ * - ApprovalToken validation
+ * - PreSendGate checks
  *
  * Required Environment Variables:
  * - GMAIL_CLIENT_ID: OAuth2 client ID
@@ -40,6 +45,18 @@ export interface GmailThreadMetadata {
   messageCount: number;
   /** Last message date (ISO) */
   lastMessageDate: string;
+}
+
+/**
+ * Send draft result
+ */
+export interface GmailSendResult {
+  /** Message ID after sending */
+  messageId: string;
+  /** Thread ID */
+  threadId: string;
+  /** Internal date (Unix timestamp in ms) */
+  internalDate: number;
 }
 
 /**
@@ -111,6 +128,27 @@ export class GmailClient {
    */
   isStubMode(): boolean {
     return this.isStub;
+  }
+
+  /**
+   * Send an existing draft
+   *
+   * IMPORTANT: This method ONLY sends drafts that were already created.
+   * Direct email composition and immediate sending is NOT supported.
+   *
+   * @param draftId - Gmail draft ID to send
+   * @returns Send result with messageId, threadId, and internalDate
+   * @throws Error if sending fails
+   */
+  async sendDraft(draftId: string): Promise<GmailSendResult> {
+    if (this.isStub) {
+      return this.stubSendDraft(draftId);
+    }
+
+    validateGmailConfig();
+    await this.ensureAccessToken();
+
+    return this.sendRealDraft(draftId);
   }
 
   /**
@@ -298,6 +336,71 @@ export class GmailClient {
   }
 
   /**
+   * Stub: Send draft (for testing without Gmail)
+   */
+  private stubSendDraft(draftId: string): GmailSendResult {
+    const timestamp = Date.now();
+    console.log(`[Gmail Stub] sendDraft: ${draftId}`);
+
+    return {
+      messageId: `stub-sent-msg-${timestamp}`,
+      threadId: `stub-sent-thread-${timestamp}`,
+      internalDate: timestamp,
+    };
+  }
+
+  /**
+   * Send a real draft via Gmail API
+   */
+  private async sendRealDraft(draftId: string): Promise<GmailSendResult> {
+    // Gmail API: POST /gmail/v1/users/me/drafts/send
+    const response = await fetch(
+      'https://gmail.googleapis.com/gmail/v1/users/me/drafts/send',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id: draftId }),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to send draft: HTTP ${response.status} - ${error}`);
+    }
+
+    const data = await response.json() as {
+      id: string;
+      threadId: string;
+      labelIds: string[];
+    };
+
+    // Get message metadata to retrieve internalDate
+    const metadataResponse = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${data.id}?format=metadata`,
+      {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+        },
+      }
+    );
+
+    let internalDate = Date.now();
+    if (metadataResponse.ok) {
+      const metadata = await metadataResponse.json() as { internalDate: string };
+      internalDate = parseInt(metadata.internalDate, 10);
+    }
+
+    return {
+      messageId: data.id,
+      threadId: data.threadId,
+      internalDate,
+    };
+  }
+
+  /**
    * Create a stub draft (for testing without Gmail)
    */
   private createStubDraft(
@@ -445,10 +548,6 @@ export class GmailClient {
     return lines.join('\r\n');
   }
 
-  // ============================================================
-  // INTENTIONALLY NOT IMPLEMENTED: send()
-  // All emails must be reviewed by humans before sending.
-  // ============================================================
 }
 
 export default GmailClient;

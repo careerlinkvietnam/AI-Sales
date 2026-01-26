@@ -104,3 +104,21 @@ export {
   createTemplateQualityGate,
   getTemplateQualityGate,
 } from './TemplateQualityGate';
+export {
+  SendPolicy,
+  SendPolicyResult,
+  SendPolicyConfig,
+  SendDenyReason,
+  RateLimitResult,
+  getSendPolicy,
+  resetSendPolicy,
+  createTestSendPolicy,
+} from './SendPolicy';
+export {
+  PreSendGate,
+  PreSendGateResult,
+  PreSendEmailContent,
+  PreSendGateConfig,
+  getPreSendGate,
+  createTestPreSendGate,
+} from './PreSendGate';

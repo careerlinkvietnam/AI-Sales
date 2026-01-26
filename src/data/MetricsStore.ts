@@ -14,7 +14,25 @@ import * as path from 'path';
 /**
  * Event types for metrics tracking
  */
-export type MetricEventType = 'DRAFT_CREATED' | 'SENT_DETECTED' | 'REPLY_DETECTED';
+export type MetricEventType =
+  | 'DRAFT_CREATED'
+  | 'SENT_DETECTED'
+  | 'REPLY_DETECTED'
+  | 'AUTO_SEND_ATTEMPT'
+  | 'AUTO_SEND_SUCCESS'
+  | 'AUTO_SEND_BLOCKED';
+
+/**
+ * Blocked reason types (for AUTO_SEND_BLOCKED events)
+ */
+export type SendBlockedReason =
+  | 'not_enabled'
+  | 'kill_switch'
+  | 'allowlist'
+  | 'rate_limit'
+  | 'gate_failed'
+  | 'invalid_token'
+  | 'no_allowlist_configured';
 
 /**
  * Metrics event structure
@@ -167,6 +185,109 @@ export class MetricsStore {
         sentDate: data.sentDate,
       },
     });
+  }
+
+  /**
+   * Record AUTO_SEND_ATTEMPT event
+   */
+  recordAutoSendAttempt(data: {
+    trackingId: string;
+    companyId: string;
+    templateId: string;
+    abVariant: 'A' | 'B' | null;
+    draftId: string;
+    recipientDomain?: string; // Domain only, not full email (no PII)
+  }): void {
+    this.appendEvent({
+      trackingId: data.trackingId,
+      companyId: data.companyId,
+      templateId: data.templateId,
+      abVariant: data.abVariant,
+      eventType: 'AUTO_SEND_ATTEMPT',
+      gmailThreadId: null,
+      replyLatencyHours: null,
+      meta: {
+        source: 'auto_send',
+        draftId: data.draftId,
+        recipientDomain: data.recipientDomain,
+      },
+    });
+  }
+
+  /**
+   * Record AUTO_SEND_SUCCESS event
+   */
+  recordAutoSendSuccess(data: {
+    trackingId: string;
+    companyId: string;
+    templateId: string;
+    abVariant: 'A' | 'B' | null;
+    draftId: string;
+    messageId: string;
+    threadId: string;
+    recipientDomain?: string;
+  }): void {
+    this.appendEvent({
+      trackingId: data.trackingId,
+      companyId: data.companyId,
+      templateId: data.templateId,
+      abVariant: data.abVariant,
+      eventType: 'AUTO_SEND_SUCCESS',
+      gmailThreadId: data.threadId,
+      replyLatencyHours: null,
+      meta: {
+        source: 'auto_send',
+        draftId: data.draftId,
+        messageId: data.messageId,
+        recipientDomain: data.recipientDomain,
+      },
+    });
+  }
+
+  /**
+   * Record AUTO_SEND_BLOCKED event
+   */
+  recordAutoSendBlocked(data: {
+    trackingId: string;
+    companyId: string;
+    templateId: string;
+    abVariant: 'A' | 'B' | null;
+    draftId: string;
+    reason: SendBlockedReason;
+    details?: string;
+    recipientDomain?: string;
+  }): void {
+    this.appendEvent({
+      trackingId: data.trackingId,
+      companyId: data.companyId,
+      templateId: data.templateId,
+      abVariant: data.abVariant,
+      eventType: 'AUTO_SEND_BLOCKED',
+      gmailThreadId: null,
+      replyLatencyHours: null,
+      meta: {
+        source: 'auto_send',
+        draftId: data.draftId,
+        reason: data.reason,
+        details: data.details,
+        recipientDomain: data.recipientDomain,
+      },
+    });
+  }
+
+  /**
+   * Count AUTO_SEND_SUCCESS events for today (UTC)
+   */
+  countTodaySends(): number {
+    // Use UTC date directly to match ISO timestamps stored in the file
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const events = this.readAllEvents();
+    return events.filter(
+      (e) =>
+        e.eventType === 'AUTO_SEND_SUCCESS' &&
+        e.timestamp.startsWith(todayStr)
+    ).length;
   }
 
   /**

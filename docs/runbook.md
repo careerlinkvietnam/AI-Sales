@@ -38,6 +38,13 @@ CANDIDATE_API_KEY=                 # Required for real mode
 
 # Approval Token Configuration
 APPROVAL_TOKEN_SECRET=<HMAC秘密鍵>  # 本番環境では必須
+
+# Auto-Send Configuration (P4-1)
+ENABLE_AUTO_SEND=false             # 'true' で送信有効（デフォルト: false）
+KILL_SWITCH=false                  # 'true' で緊急停止（デフォルト: false）
+SEND_ALLOWLIST_DOMAINS=            # 許可ドメイン（カンマ区切り、例: "example.com,test.co.jp"）
+SEND_ALLOWLIST_EMAILS=             # 許可メール（カンマ区切り、例: "a@x.com,b@y.com"）
+SEND_MAX_PER_DAY=20                # 日次最大送信数（デフォルト: 20）
 ```
 
 ### 1.2 認証の優先順位
@@ -432,6 +439,9 @@ tail -10 logs/audit.ndjson | jq .
 - `DRAFT_CREATED`: 下書き作成時
 - `SENT_DETECTED`: Gmail送信検出時
 - `REPLY_DETECTED`: 返信検出時
+- `AUTO_SEND_ATTEMPT`: 自動送信試行時
+- `AUTO_SEND_SUCCESS`: 自動送信成功時
+- `AUTO_SEND_BLOCKED`: 自動送信ブロック時（理由付き）
 
 **記録される情報**:
 - タイムスタンプ
@@ -998,6 +1008,7 @@ npx ts-node src/cli/run_ops.ts <subcommand> [options]
 | `approve` | テンプレート承認 | approve_templates.ts |
 | `safety` | 実験安全性チェック | ExperimentSafetyCheck |
 | `status` | 実験ステータス確認 | ExperimentScheduler |
+| `send` | 下書き送信（限定パイロット） | send_draft.ts |
 
 #### scan サブコマンド
 
@@ -1075,7 +1086,148 @@ npx ts-node src/cli/run_ops.ts status
 npx ts-node src/cli/run_ops.ts status --all
 ```
 
-### 7.14 実験安全性チェック（ExperimentSafetyCheck）
+#### send サブコマンド
+
+下書きを送信します（限定パイロット機能）。
+
+**前提条件**:
+- `ENABLE_AUTO_SEND=true` が設定されていること
+- `KILL_SWITCH=false`（またはKILL_SWITCH未設定）
+- 送信先が `SEND_ALLOWLIST_DOMAINS` または `SEND_ALLOWLIST_EMAILS` に含まれていること
+- 有効なApprovalTokenが提供されること
+
+```bash
+# ドライラン（送信せず、チェックのみ）
+npx ts-node src/cli/run_ops.ts send \
+  --draft-id "draft-123" \
+  --to "user@allowed-domain.com" \
+  --approval-token "..." \
+  --dry-run
+
+# 実際に送信
+npx ts-node src/cli/run_ops.ts send \
+  --draft-id "draft-123" \
+  --to "user@allowed-domain.com" \
+  --approval-token "..." \
+  --tracking-id "track123" \
+  --company-id "company123" \
+  --template-id "template123" \
+  --ab-variant "A"
+```
+
+### 7.14 自動送信（send_draft CLI）
+
+下書きを送信するCLIです。**限定パイロット**として、厳格な安全制御の下で運用されます。
+
+#### 設計原則
+
+1. **デフォルトは送信しない**: `ENABLE_AUTO_SEND=true` が明示的に設定されていない限り、送信は行われません
+2. **承認トークン必須**: ApprovalTokenが有効でなければ送信できません
+3. **Allowlist制限**: 送信先は `SEND_ALLOWLIST_DOMAINS` または `SEND_ALLOWLIST_EMAILS` に含まれている必要があります
+4. **緊急停止**: `KILL_SWITCH=true` で即座に全送信を停止できます
+5. **レート制限**: `SEND_MAX_PER_DAY` で日次送信数を制限します（デフォルト: 20）
+6. **PreSendGate**: 送信前にPII検出、禁止表現チェック、トラッキングタグ確認を実施します
+
+#### 実行方法
+
+```bash
+# 基本使用法
+npx ts-node src/cli/send_draft.ts \
+  --draft-id "draft-123" \
+  --to "user@allowed-domain.com" \
+  --approval-token "..."
+
+# フルオプション
+npx ts-node src/cli/send_draft.ts \
+  --draft-id "draft-123" \
+  --to "user@allowed-domain.com" \
+  --approval-token "..." \
+  --tracking-id "track123" \
+  --company-id "company123" \
+  --template-id "template123" \
+  --ab-variant "A" \
+  --subject "件名 [CL-AI:a1b2c3d4]" \
+  --body "メール本文..." \
+  --dry-run
+```
+
+#### オプション
+
+| オプション | 説明 | 必須 |
+|------------|------|------|
+| `--draft-id <id>` | Gmail下書きID | ✓ |
+| `--to <email>` | 送信先メールアドレス | ✓ |
+| `--approval-token <token>` | 承認トークン | ✓ |
+| `--tracking-id <id>` | トラッキングID | - |
+| `--company-id <id>` | 企業ID（メトリクス用） | - |
+| `--template-id <id>` | テンプレートID（メトリクス用） | - |
+| `--ab-variant <A\|B>` | A/Bバリアント（メトリクス用） | - |
+| `--subject <subject>` | 件名（PreSendGateチェック用） | - |
+| `--body <body>` | 本文（PreSendGateチェック用） | - |
+| `--dry-run` | チェックのみ、送信しない | - |
+| `--json` | JSON出力のみ | - |
+
+#### 安全制御の流れ
+
+```
+1. KILL_SWITCH チェック → true なら即座にブロック
+2. ENABLE_AUTO_SEND チェック → false ならブロック
+3. Allowlist チェック → 未設定または不一致ならブロック
+4. ApprovalToken 検証 → 無効ならブロック
+5. レート制限チェック → 日次上限超過ならブロック
+6. PreSendGate チェック → PII/禁止表現/トラッキングタグ
+7. Gmail API で送信
+```
+
+#### ブロック理由
+
+| 理由 | 説明 |
+|------|------|
+| `not_enabled` | ENABLE_AUTO_SEND が true でない |
+| `kill_switch` | KILL_SWITCH が true |
+| `no_allowlist_configured` | Allowlist が未設定 |
+| `allowlist` | 送信先が Allowlist に含まれていない |
+| `rate_limit` | 日次送信上限に達した |
+| `invalid_token` | ApprovalToken が無効または改竄されている |
+| `gate_failed` | PreSendGate チェックに失敗 |
+
+#### メトリクス記録
+
+送信試行/成功/ブロックは自動的に `data/metrics.ndjson` に記録されます。
+
+**記録される情報**:
+- タイムスタンプ
+- トラッキングID
+- 企業ID
+- テンプレートID
+- A/Bバリアント
+- ドラフトID
+- 送信先ドメイン（フルメールアドレスではない、PII保護）
+- ブロック理由（ブロック時）
+
+**記録されない情報（PII禁止）**:
+- 送信先のフルメールアドレス
+- メール本文
+- 候補者情報
+
+#### 緊急停止手順
+
+```bash
+# 1. .env に KILL_SWITCH=true を設定
+echo "KILL_SWITCH=true" >> .env
+
+# 2. または環境変数で設定
+export KILL_SWITCH=true
+
+# 3. 確認
+npx ts-node src/cli/run_ops.ts send \
+  --draft-id "any" \
+  --to "any@any.com" \
+  --approval-token "any"
+# → "kill_switch" でブロックされることを確認
+```
+
+### 7.15 実験安全性チェック（ExperimentSafetyCheck）
 
 実験の健全性をチェックし、凍結/ロールバックを**推奨**します。
 
@@ -1244,3 +1396,4 @@ npx ts-node src/cli/run_ops.ts safety --experiment "ab_subject_cta_v1"
 | 2026-01-26 | P3-5: テンプレート改善提案自動生成（ImprovementPicker, TemplateGenerator, propose_templates CLI） |
 | 2026-01-26 | P3-6: テンプレート承認ワークフロー（TemplateQualityGate, approve_templates CLI, 承認ログ） |
 | 2026-01-26 | P3-7: 実験ライフサイクル管理（status, startAt, endAt, rollbackRule, ExperimentScheduler, ExperimentSafetyCheck, run_ops CLI, 日次/週次ルーチン） |
+| 2026-01-26 | P4-1: 自動送信（限定パイロット）- SendPolicy, PreSendGate, send_draft CLI, AUTO_SEND_* メトリクス、緊急停止機能 |
