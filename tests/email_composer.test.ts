@@ -249,7 +249,7 @@ describe('EmailComposer', () => {
   });
 
   describe('empty candidates', () => {
-    it('handles empty candidate list', () => {
+    it('handles empty candidate list with fallback message', () => {
       const profile = createTestProfile();
       const candidates: Candidate[] = [];
 
@@ -259,6 +259,120 @@ describe('EmailComposer', () => {
       expect(email.body).toBeTruthy();
       // Should not contain candidate section header
       expect(email.body).not.toContain('【ご紹介候補者】');
+      // Should contain fallback message
+      expect(email.body).toContain('候補者を探しております');
+    });
+  });
+
+  describe('careerSummary in email (B案仕様)', () => {
+    it('includes careerSummary in candidate section', () => {
+      const profile = createTestProfile();
+      const candidates = createTestCandidates();
+
+      const email = composer.compose(profile, candidates);
+
+      expect(email.body).toContain('経歴要約:');
+      expect(email.body).toContain('品質管理システムの導入');
+    });
+
+    it('includes yearsOfExperience when available', () => {
+      const profile = createTestProfile();
+      const candidates: Candidate[] = [
+        {
+          candidateId: 'C001',
+          headline: 'テスト候補者',
+          careerSummary: '経歴要約テスト。',
+          keySkills: ['スキル1'],
+          yearsOfExperience: 10,
+          rationale: {
+            reasonTags: ['即戦力'],
+            evidenceFields: ['candidate.careerSummary'],
+          },
+        },
+      ];
+
+      const email = composer.compose(profile, candidates);
+
+      expect(email.body).toContain('（経験10年）');
+    });
+  });
+
+  describe('composeWithAudit', () => {
+    it('returns audit information', () => {
+      const profile = createTestProfile();
+      const candidates = createTestCandidates();
+
+      const result = composer.composeWithAudit(profile, candidates);
+
+      expect(result.email.subject).toBeTruthy();
+      expect(result.candidateExclusions).toBeDefined();
+      expect(Array.isArray(result.candidateExclusions)).toBe(true);
+      expect(result.validationResult).toBeDefined();
+    });
+
+    it('excludes candidates with PII in careerSummary', () => {
+      const profile = createTestProfile();
+      const candidates: Candidate[] = [
+        {
+          candidateId: 'C001',
+          headline: 'Clean candidate',
+          careerSummary: '製造業にて10年間の経験。',
+          keySkills: ['スキル1'],
+          rationale: {
+            reasonTags: ['即戦力'],
+            evidenceFields: ['candidate.careerSummary'],
+          },
+        },
+        {
+          candidateId: 'C002',
+          headline: 'Bad candidate',
+          careerSummary: '連絡先: bad@email.com まで。',
+          keySkills: ['スキル2'],
+          rationale: {
+            reasonTags: ['言語スキル'],
+            evidenceFields: ['candidate.careerSummary'],
+          },
+        },
+      ];
+
+      const result = composer.composeWithAudit(profile, candidates);
+
+      // C001 should be included, C002 excluded
+      expect(result.email.body).toContain('Clean candidate');
+      expect(result.email.body).not.toContain('Bad candidate');
+      expect(result.email.body).not.toContain('bad@email.com');
+
+      // Audit should show exclusion
+      const c002Exclusion = result.candidateExclusions.find(
+        e => e.candidateId === 'C002'
+      );
+      expect(c002Exclusion?.included).toBe(false);
+      expect(c002Exclusion?.excludedReason).toContain('PII');
+    });
+
+    it('limits reason tags to 3', () => {
+      const profile = createTestProfile();
+      const candidates: Candidate[] = [
+        {
+          candidateId: 'C001',
+          headline: 'テスト候補者',
+          careerSummary: '経歴要約。',
+          keySkills: ['スキル1'],
+          rationale: {
+            reasonTags: ['即戦力', '言語スキル', '勤務地一致', '業界経験一致', '営業経験'],
+            evidenceFields: ['candidate.careerSummary'],
+          },
+        },
+      ];
+
+      const email = composer.compose(profile, candidates);
+
+      // Should only contain first 3 tags
+      expect(email.body).toContain('即戦力');
+      expect(email.body).toContain('言語スキル');
+      expect(email.body).toContain('勤務地一致');
+      expect(email.body).not.toContain('業界経験一致');
+      expect(email.body).not.toContain('営業経験');
     });
   });
 

@@ -1,14 +1,21 @@
 /**
- * Email Composer for Japanese Sales Emails
+ * Email Composer for Japanese Sales Emails (B案仕様)
  *
  * Generates email subject and body using template-driven approach.
  * Rules:
  * - Only use facts from CompanyProfile and Candidate rationale
+ * - Include career summary in candidate section
  * - Never include assumptions in the main body
  * - Minimize PII (no candidate names or contact info)
+ * - Validate content before output
  */
 
 import { CompanyProfile, Candidate, EmailOutput } from '../types';
+import {
+  filterCandidatesWithAudit,
+  validateEmailBody,
+  CandidateExclusionResult,
+} from './ContentGuards';
 
 /**
  * Email template configuration
@@ -18,12 +25,30 @@ interface EmailTemplate {
   greeting: string;
   introduction: string;
   candidateSection: string;
+  noCandidateSection: string;
   closing: string;
   signature: string;
 }
 
 /**
- * Default Japanese email template
+ * Compose result with audit information
+ */
+export interface ComposeResult {
+  email: EmailOutput;
+  candidateExclusions: CandidateExclusionResult[];
+  validationResult: {
+    ok: boolean;
+    violations: string[];
+  };
+}
+
+/**
+ * Maximum reason tags to include in email
+ */
+const MAX_REASON_TAGS = 3;
+
+/**
+ * Default Japanese email template (B案仕様)
  */
 const DEFAULT_TEMPLATE: EmailTemplate = {
   subjectTemplate: '【CareerLink】{{companyName}}様へ人材のご提案',
@@ -39,6 +64,12 @@ CareerLinkの営業担当でございます。
   candidateSection: `
 【ご紹介候補者】
 {{candidateList}}
+`.trim(),
+  noCandidateSection: `
+現在、貴社の条件に合致する候補者を探しております。
+近日中に適切な候補者が見つかり次第、改めてご連絡させていただきます。
+
+なお、採用に関するご要望やご質問がございましたら、お気軽にお申し付けください。
 `.trim(),
   closing: `
 上記の候補者について、ご興味がございましたら、詳細な情報をお送りいたします。
@@ -65,13 +96,36 @@ export class EmailComposer {
    * @returns Email subject and body
    */
   compose(profile: CompanyProfile, candidates: Candidate[]): EmailOutput {
+    const result = this.composeWithAudit(profile, candidates);
+    return result.email;
+  }
+
+  /**
+   * Compose email with full audit information
+   *
+   * @param profile - Company profile with facts
+   * @param candidates - Candidate list with rationale
+   * @returns Email output with audit data
+   */
+  composeWithAudit(profile: CompanyProfile, candidates: Candidate[]): ComposeResult {
+    // Filter candidates for PII
+    const { included: filteredCandidates, exclusions } =
+      filterCandidatesWithAudit(candidates);
+
     const subject = this.composeSubject(profile);
-    const body = this.composeBody(profile, candidates);
+    const body = this.composeBody(profile, filteredCandidates);
+
+    // Validate final email body
+    const validationResult = validateEmailBody(body);
 
     return {
-      subject,
-      body,
-      to: profile.facts.companyId, // Placeholder - actual email from CRM
+      email: {
+        subject,
+        body,
+        to: profile.facts.companyId, // Placeholder - actual email from CRM
+      },
+      candidateExclusions: exclusions,
+      validationResult,
     };
   }
 
@@ -79,8 +133,10 @@ export class EmailComposer {
    * Compose email subject
    */
   private composeSubject(profile: CompanyProfile): string {
-    return this.template.subjectTemplate
-      .replace('{{companyName}}', profile.facts.companyName);
+    return this.template.subjectTemplate.replace(
+      '{{companyName}}',
+      profile.facts.companyName
+    );
   }
 
   /**
@@ -90,26 +146,29 @@ export class EmailComposer {
     const parts: string[] = [];
 
     // Greeting
-    parts.push(this.template.greeting
-      .replace('{{companyName}}', profile.facts.companyName));
+    parts.push(
+      this.template.greeting.replace('{{companyName}}', profile.facts.companyName)
+    );
     parts.push('');
 
     // Introduction with contact context
     const contactContext = this.buildContactContext(profile);
-    parts.push(this.template.introduction
-      .replace('{{contactContext}}', contactContext));
+    parts.push(this.template.introduction.replace('{{contactContext}}', contactContext));
     parts.push('');
 
-    // Candidate section
+    // Candidate section or fallback
     if (candidates.length > 0) {
       const candidateList = this.formatCandidateList(candidates);
-      parts.push(this.template.candidateSection
-        .replace('{{candidateList}}', candidateList));
+      parts.push(
+        this.template.candidateSection.replace('{{candidateList}}', candidateList)
+      );
       parts.push('');
+      // Closing (only when candidates exist)
+      parts.push(this.template.closing);
+    } else {
+      // No candidates fallback
+      parts.push(this.template.noCandidateSection);
     }
-
-    // Closing
-    parts.push(this.template.closing);
     parts.push('');
 
     // Signature
@@ -149,46 +208,59 @@ export class EmailComposer {
    */
   private monthsSince(date: Date): number {
     const now = new Date();
-    const months = (now.getFullYear() - date.getFullYear()) * 12 +
+    const months =
+      (now.getFullYear() - date.getFullYear()) * 12 +
       (now.getMonth() - date.getMonth());
     return Math.max(0, months);
   }
 
   /**
-   * Format candidate list for email
+   * Format candidate list for email (B案仕様: careerSummary含む)
    * Note: No PII (names, contact info) included
    */
   private formatCandidateList(candidates: Candidate[]): string {
-    return candidates.map((candidate, index) => {
-      const lines: string[] = [];
+    return candidates
+      .map((candidate, index) => {
+        const lines: string[] = [];
 
-      // Candidate number and headline
-      lines.push(`${index + 1}. ${candidate.headline}`);
+        // Candidate header: number + headline + job title/years if available
+        const headerParts: string[] = [`${index + 1}. ${candidate.headline}`];
+        if (candidate.yearsOfExperience) {
+          headerParts.push(`（経験${candidate.yearsOfExperience}年）`);
+        }
+        lines.push(headerParts.join(''));
 
-      // Key skills
-      if (candidate.keySkills.length > 0) {
-        lines.push(`   スキル: ${candidate.keySkills.join('、')}`);
-      }
+        // Career summary (B案仕様)
+        if (candidate.careerSummary) {
+          lines.push(`   経歴要約: ${candidate.careerSummary}`);
+        }
 
-      // Location and availability
-      const details: string[] = [];
-      if (candidate.location) {
-        details.push(`勤務地: ${candidate.location}`);
-      }
-      if (candidate.availability) {
-        details.push(`入社可能: ${candidate.availability}`);
-      }
-      if (details.length > 0) {
-        lines.push(`   ${details.join(' / ')}`);
-      }
+        // Key skills
+        if (candidate.keySkills.length > 0) {
+          lines.push(`   スキル: ${candidate.keySkills.join('、')}`);
+        }
 
-      // Match reasons from rationale (based on facts only)
-      if (candidate.rationale.reasonTags.length > 0) {
-        lines.push(`   推薦理由: ${candidate.rationale.reasonTags.join('、')}`);
-      }
+        // Location and availability
+        const details: string[] = [];
+        if (candidate.location) {
+          details.push(`勤務地: ${candidate.location}`);
+        }
+        if (candidate.availability) {
+          details.push(`入社可能: ${candidate.availability}`);
+        }
+        if (details.length > 0) {
+          lines.push(`   ${details.join(' / ')}`);
+        }
 
-      return lines.join('\n');
-    }).join('\n\n');
+        // Match reasons from rationale (based on facts only, max 3)
+        if (candidate.rationale.reasonTags.length > 0) {
+          const tags = candidate.rationale.reasonTags.slice(0, MAX_REASON_TAGS);
+          lines.push(`   推薦理由: ${tags.join('、')}`);
+        }
+
+        return lines.join('\n');
+      })
+      .join('\n\n');
   }
 }
 
