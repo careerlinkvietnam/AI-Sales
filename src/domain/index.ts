@@ -32,3 +32,18 @@ export {
   getApprovalTokenManager,
   createTestTokenManager,
 } from './ApprovalToken';
+export {
+  generateTrackingId,
+  formatTrackingTag,
+  applyTrackingToEmail,
+  extractTrackingId,
+  isValidTrackingId,
+} from './Tracking';
+export {
+  ABAssigner,
+  ABVariant,
+  ABAssignment,
+  TemplateConfig,
+  getABAssigner,
+  createTestABAssigner,
+} from './ABAssigner';

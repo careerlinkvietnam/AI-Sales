@@ -3,6 +3,7 @@
  */
 
 import { EmailComposer } from '../src/domain/EmailComposer';
+import { ABAssigner } from '../src/domain/ABAssigner';
 import { CompanyProfile, Candidate } from '../src/types';
 
 describe('EmailComposer', () => {
@@ -308,6 +309,18 @@ describe('EmailComposer', () => {
       expect(result.candidateExclusions).toBeDefined();
       expect(Array.isArray(result.candidateExclusions)).toBe(true);
       expect(result.validationResult).toBeDefined();
+      expect(result.templateId).toBeDefined();
+    });
+
+    it('returns templateId and abVariant', () => {
+      const profile = createTestProfile();
+      const candidates = createTestCandidates();
+
+      const result = composer.composeWithAudit(profile, candidates);
+
+      // Default composer (no A/B) should return default template
+      expect(result.templateId).toBe('new_candidates_v1');
+      expect(result.abVariant).toBeNull();
     });
 
     it('excludes candidates with PII in careerSummary', () => {
@@ -462,7 +475,9 @@ describe('EmailComposer', () => {
   describe('custom template', () => {
     it('allows custom greeting', () => {
       const customComposer = new EmailComposer({
-        greeting: '{{companyName}} 人事部 ご担当者様',
+        template: {
+          greeting: '{{companyName}} 人事部 ご担当者様',
+        },
       });
 
       const profile = createTestProfile();
@@ -475,7 +490,9 @@ describe('EmailComposer', () => {
 
     it('allows custom subject template', () => {
       const customComposer = new EmailComposer({
-        subjectTemplate: '【人材提案】{{companyName}}様向け候補者のご紹介',
+        template: {
+          subjectTemplate: '【人材提案】{{companyName}}様向け候補者のご紹介',
+        },
       });
 
       const profile = createTestProfile();
@@ -485,6 +502,76 @@ describe('EmailComposer', () => {
 
       expect(email.subject).toContain('【人材提案】');
       expect(email.subject).toContain('ABC Manufacturing Co., Ltd.');
+    });
+  });
+
+  describe('A/B template integration', () => {
+    it('uses A/B assigned template when provided', () => {
+      const assigner = new ABAssigner({ salt: 'test-salt' });
+      const abAssignment = assigner.assign('test-company');
+
+      const abComposer = new EmailComposer({ abAssignment });
+      const profile = createTestProfile();
+      const candidates = createTestCandidates();
+
+      const result = abComposer.composeWithAudit(profile, candidates);
+
+      expect(result.templateId).toBe(abAssignment.templateId);
+      expect(result.abVariant).toBe(abAssignment.variant);
+    });
+
+    it('uses variant A subject template', () => {
+      const assigner = new ABAssigner({ salt: 'test-salt' });
+      const abAssignmentA = {
+        variant: 'A' as const,
+        templateId: 'new_candidates_v1_A',
+        template: assigner.getTemplate('A'),
+      };
+
+      const abComposer = new EmailComposer({ abAssignment: abAssignmentA });
+      const profile = createTestProfile();
+      const candidates = createTestCandidates();
+
+      const email = abComposer.compose(profile, candidates);
+
+      // Variant A uses 【CareerLink】 prefix
+      expect(email.subject).toContain('【CareerLink】');
+    });
+
+    it('uses variant B subject template', () => {
+      const assigner = new ABAssigner({ salt: 'test-salt' });
+      const abAssignmentB = {
+        variant: 'B' as const,
+        templateId: 'new_candidates_v1_B',
+        template: assigner.getTemplate('B'),
+      };
+
+      const abComposer = new EmailComposer({ abAssignment: abAssignmentB });
+      const profile = createTestProfile();
+      const candidates = createTestCandidates();
+
+      const email = abComposer.compose(profile, candidates);
+
+      // Variant B uses different format
+      expect(email.subject).toContain('厳選人材のご案内');
+    });
+
+    it('uses variant-specific candidate header', () => {
+      const assigner = new ABAssigner({ salt: 'test-salt' });
+      const abAssignmentB = {
+        variant: 'B' as const,
+        templateId: 'new_candidates_v1_B',
+        template: assigner.getTemplate('B'),
+      };
+
+      const abComposer = new EmailComposer({ abAssignment: abAssignmentB });
+      const profile = createTestProfile();
+      const candidates = createTestCandidates();
+
+      const email = abComposer.compose(profile, candidates);
+
+      // Variant B uses different candidate header
+      expect(email.body).toContain('厳選候補者のご紹介');
     });
   });
 });

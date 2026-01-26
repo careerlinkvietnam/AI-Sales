@@ -27,6 +27,8 @@ import { EmailComposer, ComposeResult } from '../domain/EmailComposer';
 import { TagNormalizer } from '../domain/TagNormalizer';
 import { getAuditLogger } from '../domain/AuditLogger';
 import { getApprovalTokenManager } from '../domain/ApprovalToken';
+import { generateTrackingId, applyTrackingToEmail } from '../domain/Tracking';
+import { getABAssigner, ABVariant } from '../domain/ABAssigner';
 import {
   AuthError,
   NetworkError,
@@ -85,6 +87,9 @@ interface PipelineResult {
     bodyPreview: string;
     bodyLength: number;
     validationOk: boolean;
+    trackingId: string;
+    templateId: string;
+    abVariant: ABVariant | null;
   } | null;
   gmailDraft: {
     draftId: string;
@@ -276,13 +281,34 @@ async function runPipeline(): Promise<PipelineResult> {
     }
 
     // ============================================================
-    // Step 7: Compose email with audit
+    // Step 7: Compose email with A/B assignment and tracking
     // ============================================================
     log('Step 7: Composing email...');
 
-    const emailComposer = new EmailComposer();
+    // Generate tracking ID
+    const trackingId = generateTrackingId();
+    logVerbose(`   Tracking ID: ${trackingId}`);
+
+    // Get A/B assignment for this company
+    const abAssigner = getABAssigner();
+    const abAssignment = abAssigner.assign(companyProfile.facts.companyId);
+    logVerbose(`   A/B Variant: ${abAssignment.variant} (${abAssignment.templateId})`);
+
+    // Compose email with A/B template
+    const emailComposer = new EmailComposer({ abAssignment });
     const composeResult: ComposeResult = emailComposer.composeWithAudit(companyProfile, candidates);
-    const email: EmailOutput = composeResult.email;
+
+    // Apply tracking to email
+    const trackedEmail = applyTrackingToEmail(
+      composeResult.email.subject,
+      composeResult.email.body,
+      trackingId
+    );
+    const email: EmailOutput = {
+      ...composeResult.email,
+      subject: trackedEmail.subject,
+      body: trackedEmail.body,
+    };
 
     // Count included/excluded candidates
     const includedCount = composeResult.candidateExclusions.filter(e => e.included).length;
@@ -295,9 +321,13 @@ async function runPipeline(): Promise<PipelineResult> {
       bodyPreview: email.body.substring(0, 100) + (email.body.length > 100 ? '...' : ''),
       bodyLength: email.body.length,
       validationOk: composeResult.validationResult.ok,
+      trackingId,
+      templateId: composeResult.templateId,
+      abVariant: composeResult.abVariant,
     };
 
     log(`   Subject: ${email.subject}`);
+    log(`   Template: ${composeResult.templateId} (Variant ${abAssignment.variant})`);
     logVerbose(`   Body length: ${email.body.length} chars`);
     if (excludedCount > 0) {
       log(`   Warning: ${excludedCount} candidate(s) excluded due to PII`);
@@ -321,6 +351,9 @@ async function runPipeline(): Promise<PipelineResult> {
       log('   Dry run mode - skipping Gmail draft');
       log('');
       log('--- Email Preview ---');
+      log(`Tracking ID: ${trackingId}`);
+      log(`Template: ${composeResult.templateId}`);
+      log(`A/B Variant: ${abAssignment.variant}`);
       log(`Subject: ${email.subject}`);
       log('---');
       log(email.body);
@@ -334,6 +367,9 @@ async function runPipeline(): Promise<PipelineResult> {
         selectedCandidates: composeResult.candidateExclusions,
         draftCreated: false,
         mode,
+        trackingId,
+        templateId: composeResult.templateId,
+        abVariant: composeResult.abVariant,
         metadata: { dryRun: true },
       });
     } else {
@@ -373,6 +409,9 @@ async function runPipeline(): Promise<PipelineResult> {
         draftCreated: true,
         gmailDraftId: draftResult.draftId,
         mode,
+        trackingId,
+        templateId: composeResult.templateId,
+        abVariant: composeResult.abVariant,
       });
 
       // Log draft created event
@@ -382,6 +421,9 @@ async function runPipeline(): Promise<PipelineResult> {
         gmailDraftId: draftResult.draftId,
         candidateCount: includedCount,
         mode,
+        trackingId,
+        templateId: composeResult.templateId,
+        abVariant: composeResult.abVariant,
       });
     }
 

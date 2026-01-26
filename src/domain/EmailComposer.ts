@@ -8,6 +8,7 @@
  * - Never include assumptions in the main body
  * - Minimize PII (no candidate names or contact info)
  * - Validate content before output
+ * - Support A/B template variations
  */
 
 import { CompanyProfile, Candidate, EmailOutput } from '../types';
@@ -16,6 +17,7 @@ import {
   validateEmailBody,
   CandidateExclusionResult,
 } from './ContentGuards';
+import { ABAssignment, ABVariant } from './ABAssigner';
 
 /**
  * Email template configuration
@@ -35,6 +37,8 @@ interface EmailTemplate {
  */
 export interface ComposeResult {
   email: EmailOutput;
+  templateId: string;
+  abVariant: ABVariant | null;
   candidateExclusions: CandidateExclusionResult[];
   validationResult: {
     ok: boolean;
@@ -81,11 +85,43 @@ CareerLink Vietnam
 `.trim(),
 };
 
+/**
+ * Default template ID when not using A/B testing
+ */
+const DEFAULT_TEMPLATE_ID = 'new_candidates_v1';
+
 export class EmailComposer {
   private readonly template: EmailTemplate;
+  private readonly templateId: string;
+  private readonly abVariant: ABVariant | null;
 
-  constructor(template?: Partial<EmailTemplate>) {
-    this.template = { ...DEFAULT_TEMPLATE, ...template };
+  constructor(options?: {
+    template?: Partial<EmailTemplate>;
+    abAssignment?: ABAssignment;
+  }) {
+    if (options?.abAssignment) {
+      // Use A/B assigned template
+      const ab = options.abAssignment;
+      this.template = {
+        ...DEFAULT_TEMPLATE,
+        subjectTemplate: ab.template.subjectTemplate,
+        candidateSection: `
+${ab.template.candidateHeader}
+{{candidateList}}
+`.trim(),
+        closing: `
+${ab.template.ctaText}
+ご検討のほど、よろしくお願いいたします。
+`.trim(),
+        ...options.template,
+      };
+      this.templateId = ab.templateId;
+      this.abVariant = ab.variant;
+    } else {
+      this.template = { ...DEFAULT_TEMPLATE, ...options?.template };
+      this.templateId = DEFAULT_TEMPLATE_ID;
+      this.abVariant = null;
+    }
   }
 
   /**
@@ -124,9 +160,25 @@ export class EmailComposer {
         body,
         to: profile.facts.companyId, // Placeholder - actual email from CRM
       },
+      templateId: this.templateId,
+      abVariant: this.abVariant,
       candidateExclusions: exclusions,
       validationResult,
     };
+  }
+
+  /**
+   * Get the template ID
+   */
+  getTemplateId(): string {
+    return this.templateId;
+  }
+
+  /**
+   * Get the A/B variant (null if not using A/B testing)
+   */
+  getABVariant(): ABVariant | null {
+    return this.abVariant;
   }
 
   /**

@@ -14,6 +14,11 @@ import * as crypto from 'crypto';
 import { CandidateExclusionResult } from './ContentGuards';
 
 /**
+ * A/B variant type
+ */
+export type ABVariantType = 'A' | 'B' | null;
+
+/**
  * Audit log entry structure
  */
 export interface AuditLogEntry {
@@ -35,6 +40,12 @@ export interface AuditLogEntry {
   gmailDraftId?: string;
   /** Operation mode */
   mode: 'stub' | 'real';
+  /** Tracking ID for correlation */
+  trackingId?: string;
+  /** Template ID used */
+  templateId?: string;
+  /** A/B test variant */
+  abVariant?: ABVariantType;
   /** Additional metadata */
   metadata?: Record<string, unknown>;
 }
@@ -81,6 +92,9 @@ export class AuditLogger {
     draftCreated: boolean;
     gmailDraftId?: string;
     mode: 'stub' | 'real';
+    trackingId?: string;
+    templateId?: string;
+    abVariant?: ABVariantType;
     metadata?: Record<string, unknown>;
   }): void {
     const entry: AuditLogEntry = {
@@ -93,6 +107,9 @@ export class AuditLogger {
       draftCreated: data.draftCreated,
       gmailDraftId: data.gmailDraftId,
       mode: data.mode,
+      trackingId: data.trackingId,
+      templateId: data.templateId,
+      abVariant: data.abVariant,
       metadata: data.metadata,
     };
 
@@ -108,6 +125,9 @@ export class AuditLogger {
     gmailDraftId: string;
     candidateCount: number;
     mode: 'stub' | 'real';
+    trackingId?: string;
+    templateId?: string;
+    abVariant?: ABVariantType;
   }): void {
     const entry: AuditLogEntry = {
       timestamp: new Date().toISOString(),
@@ -118,6 +138,9 @@ export class AuditLogger {
       draftCreated: true,
       gmailDraftId: data.gmailDraftId,
       mode: data.mode,
+      trackingId: data.trackingId,
+      templateId: data.templateId,
+      abVariant: data.abVariant,
       metadata: {
         candidateCount: data.candidateCount,
       },
