@@ -18,8 +18,13 @@ import * as path from 'path';
 
 /**
  * Template status in experiment
+ *
+ * - active: Currently in use for A/B testing
+ * - archived: Previously used, no longer active
+ * - inactive: Not in use
+ * - proposed: Auto-generated improvement proposal (not active in A/B assignment)
  */
-export type TemplateStatus = 'active' | 'archived' | 'inactive';
+export type TemplateStatus = 'active' | 'archived' | 'inactive' | 'proposed';
 
 /**
  * Template definition in experiment

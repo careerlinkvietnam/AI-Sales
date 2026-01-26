@@ -715,6 +715,106 @@ npx ts-node src/cli/report_segment_metrics.ts --min-sent 50
 - 母数不足のセグメントは `winner=null, reason="insufficient_n"` となります
 - 本番の昇格判断は全体のA/B判定（`promote_winner.ts`）で行ってください
 
+### 7.11 テンプレート改善提案（propose_templates）
+
+メトリクスとセグメント結果から、改善が必要なテンプレートを自動検出し、改善案を提案します。
+
+#### 実行方法
+
+```bash
+# 基本実行（提案生成のみ）
+npx ts-node src/cli/propose_templates.ts --experiment "ab_subject_cta_v1" --since "2026-01-15"
+
+# ドライラン（ファイル更新なし）
+npx ts-node src/cli/propose_templates.ts --experiment "ab_subject_cta_v1" --since "2026-01-15" --dry-run
+
+# 特定セグメントのみ対象
+npx ts-node src/cli/propose_templates.ts --experiment "ab_subject_cta_v1" --since "2026-01-15" --segment "region=南部"
+
+# JSON出力
+npx ts-node src/cli/propose_templates.ts --experiment "ab_subject_cta_v1" --since "2026-01-15" --json
+```
+
+#### オプション
+
+| オプション | 説明 | デフォルト |
+|------------|------|-----------|
+| `--experiment <id>` | 実験ID（必須） | - |
+| `--since <date>` | この日付以降のデータを使用（必須） | - |
+| `--segment <filter>` | セグメント絞り込み（例: `region=南部`） | 全セグメント |
+| `--min-sent <n>` | 候補として考慮する最小送信数 | 50 |
+| `--min-gap <n>` | 最良との差が何%以上で改善対象とするか | 0.03 (3%) |
+| `--max-proposals <n>` | 生成する最大提案数 | 5 |
+| `--dry-run` | ファイル更新なし | false |
+| `--json` | JSON出力のみ | false |
+
+#### 改善候補の選定ロジック（ImprovementPicker）
+
+1. セグメント×テンプレート×バリアント別にメトリクスを集計
+2. 各セグメント内で最良の返信率/レイテンシを特定
+3. 最良との差が `minGap` 以上のテンプレートを改善候補として選定
+4. 差が大きい順にソートし、`maxCandidates` 件に絞り込み
+
+#### 提案生成ロジック（TemplateGenerator）
+
+改善候補に対して、ルールベースで改善案を生成します（LLMは使用しない）。
+
+**適用される改善戦略**:
+
+| 戦略 | 適用条件 | 変更内容 |
+|------|----------|----------|
+| `add_urgency` | 返信率低下 | 件名・CTAに時間的緊急性を追加 |
+| `add_question` | 返信率低下 | 件名・CTAを質問形式に |
+| `personalize` | 返信率低下 | 会社名を追加して個別感を強調 |
+| `add_specificity` | 一般的なテンプレート | 提供物を具体的に明記 |
+| `soften_tone` | バリアントB（厳選系） | トーンを柔らかく |
+| `simplify` | レイテンシ高い | 冗長な表現を削除 |
+
+#### 提案の追加（experiments.json）
+
+`--dry-run` なしで実行すると、`config/experiments.json` に提案が追加されます。
+
+```json
+{
+  "templateId": "new_candidates_v1_B_add_urgency_abc123",
+  "variant": "B",
+  "status": "proposed",
+  "proposedAt": "2026-01-26T10:00:00.000Z",
+  "baseTemplateId": "new_candidates_v1_B",
+  "changes": [
+    {
+      "field": "subjectTemplate",
+      "type": "urgency",
+      "description": "Added time-sensitive language",
+      "before": "...",
+      "after": "..."
+    }
+  ],
+  "targetSegment": { "segmentName": "region", "segmentValue": "南部" }
+}
+```
+
+**重要**:
+- 追加されるテンプレートの `status` は `"proposed"` です
+- `"proposed"` ステータスのテンプレートはA/B割当に使用されません
+- 手動で `status` を `"active"` に変更するまで有効化されません
+- バックアップが `config/experiments.json.bak-YYYYMMDDHHmmss` に作成されます
+
+#### 運用フロー（推奨）
+
+1. **週1回**: `report_segment_metrics.ts` でセグメント別パフォーマンスを確認
+2. **改善対象発見時**: `propose_templates.ts --dry-run` で提案内容を確認
+3. **問題なければ**: `propose_templates.ts` で提案を追加
+4. **提案レビュー**: `experiments.json` の提案内容を人間がレビュー
+5. **承認時**: 手動で `status: "proposed"` → `status: "active"` に変更
+6. **新テンプレートでA/Bテスト開始**
+
+#### 制約事項
+
+- **自動昇格禁止**: 提案は `"proposed"` ステータスで追加され、自動的に有効化されません
+- **PII不使用**: 改善提案の生成にPIIは使用しません（テンプレートテキストのみ）
+- **ルールベース**: LLMを使用せず、事前定義された戦略パターンで生成します
+
 ---
 
 ## 8. 連絡先
@@ -737,3 +837,4 @@ npx ts-node src/cli/report_segment_metrics.ts --min-sent 50
 | 2026-01-26 | P3-2: Gmail送信/返信スキャン、A/Bメトリクスレポート追加 |
 | 2026-01-26 | P3-3: A/B勝者判定（z検定）、昇格機能、experiments.json追加 |
 | 2026-01-26 | P3-4: セグメント別メトリクス、segments.json、探索的A/B判定追加 |
+| 2026-01-26 | P3-5: テンプレート改善提案自動生成（ImprovementPicker, TemplateGenerator, propose_templates CLI） |

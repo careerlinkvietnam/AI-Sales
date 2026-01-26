@@ -65,6 +65,11 @@ const DEFAULT_TEMPLATES: Record<ABVariant, TemplateConfig> = {
 
 /**
  * A/B Assigner class
+ *
+ * Note: This assigner only uses templates configured in DEFAULT_TEMPLATES or
+ * provided via constructor. For experiment-based assignment, use ExperimentEvaluator
+ * to get active templates (status='active'). Templates with status='proposed'
+ * should NOT be used in assignment until manually promoted to 'active'.
  */
 export class ABAssigner {
   private readonly templates: Record<ABVariant, TemplateConfig>;

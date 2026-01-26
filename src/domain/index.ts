@@ -71,3 +71,17 @@ export {
   getSegmenter,
   createTestSegmenter,
 } from './Segmenter';
+export {
+  ImprovementPicker,
+  SegmentMetricsForPicker,
+  ImprovementCandidate,
+  PickerConfig,
+  createImprovementPicker,
+} from './ImprovementPicker';
+export {
+  TemplateGenerator,
+  TemplateContent,
+  TemplateChange,
+  TemplateProposal,
+  createTemplateGenerator,
+} from './TemplateGenerator';
