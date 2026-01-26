@@ -20,7 +20,7 @@
 import { config } from 'dotenv';
 import { Command } from 'commander';
 import { CrmClient, validateCrmConfig } from '../connectors/crm/CrmClient';
-import { CandidateClient } from '../connectors/candidate/CandidateClient';
+import { createCandidateClient, ICandidateClient } from '../connectors/candidate';
 import { GmailClient, isGmailConfigured } from '../connectors/gmail/GmailClient';
 import { CompanyProfileBuilder } from '../domain/CompanyProfileBuilder';
 import { EmailComposer } from '../domain/EmailComposer';
@@ -253,8 +253,9 @@ async function runPipeline(): Promise<PipelineResult> {
     // ============================================================
     log('Step 6: Searching candidates...');
 
-    const candidateClient = new CandidateClient();
-    const candidates: Candidate[] = await candidateClient.searchCandidates(companyProfile);
+    const candidateClient: ICandidateClient = createCandidateClient();
+    const searchResult = await candidateClient.searchCandidates(companyProfile);
+    const candidates: Candidate[] = searchResult.candidates;
 
     result.candidatesCount = candidates.length;
     result.mode.candidateStub = candidateClient.isStubMode();

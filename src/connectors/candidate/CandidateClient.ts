@@ -1,116 +1,173 @@
 /**
- * Candidate Search Client (Stub Implementation)
+ * Candidate Client Interface Definition
  *
- * This is a stub that returns dummy candidates for MVP testing.
- * Will be replaced with actual candidate search API integration.
+ * Defines the contract for candidate search implementations.
+ * Supports both stub (testing) and real (production) modes.
  */
 
 import { Candidate, CompanyProfile } from '../../types';
 
+// ============================================================
+// Valid Reason Tags
+// ============================================================
+
 /**
- * Dummy candidates for testing
- * In production, these would come from the candidate search API
+ * Valid reasonTags for candidate rationale
+ * Used to explain why a candidate matches a company
  */
-const DUMMY_CANDIDATES: Candidate[] = [
-  {
-    candidateId: 'C001',
-    headline: '製造業経験10年のプロダクションマネージャー',
-    keySkills: ['生産管理', '品質管理', 'リーンマネジメント', '日本語ビジネスレベル'],
-    location: '南部',
-    availability: '即日可能',
-    rationale: {
-      reasonTags: ['業界経験一致', '勤務地一致', '即戦力'],
-      evidenceFields: ['company.industryText', 'company.location.region'],
-    },
-  },
-  {
-    candidateId: 'C002',
-    headline: 'IT企業出身のプロジェクトマネージャー',
-    keySkills: ['プロジェクト管理', 'アジャイル', 'ベトナム語・日本語堪能'],
-    location: '南部',
-    availability: '1ヶ月後',
-    rationale: {
-      reasonTags: ['マネジメント経験', '言語スキル', '勤務地一致'],
-      evidenceFields: ['company.location.region'],
-    },
-  },
-  {
-    candidateId: 'C003',
-    headline: '営業経験5年の日系企業担当',
-    keySkills: ['法人営業', '日系企業対応', '提案型営業', '日本語N1'],
-    location: '南部',
-    availability: '2週間後',
-    rationale: {
-      reasonTags: ['営業経験', '日系企業理解', '言語スキル'],
-      evidenceFields: ['company.tags'],
-    },
-  },
-];
+export const VALID_REASON_TAGS = [
+  '勤務地一致',
+  '業界近似',
+  '業界経験一致',
+  '職種一致',
+  '日本語可',
+  '言語スキル',
+  'マネジメント経験',
+  '即戦力',
+  '営業経験',
+  '日系企業理解',
+  '技術スキル一致',
+] as const;
 
-export class CandidateClient {
-  private readonly isStub: boolean;
+export type ValidReasonTag = (typeof VALID_REASON_TAGS)[number];
 
-  constructor() {
-    // Currently always stub mode
-    this.isStub = true;
-  }
+// ============================================================
+// Valid Evidence Patterns
+// ============================================================
 
+/**
+ * Valid evidenceFields patterns for candidate rationale
+ * References fields from company profile used as matching evidence
+ */
+export const VALID_EVIDENCE_PATTERNS = [
+  'company.location.region',
+  'company.location.province',
+  'company.industryText',
+  'company.tags',
+  'company.companyId',
+  'company.profile',
+] as const;
+
+export type ValidEvidencePattern = (typeof VALID_EVIDENCE_PATTERNS)[number];
+
+// ============================================================
+// Search Options and Result Types
+// ============================================================
+
+/**
+ * Options for candidate search
+ */
+export interface CandidateSearchOptions {
+  /** Maximum number of candidates to return */
+  limit?: number;
+  /** Filter by region */
+  region?: string;
+  /** Industry hint for matching */
+  industryHint?: string;
+}
+
+/**
+ * Result of a candidate search operation
+ */
+export interface CandidateSearchResult {
+  /** List of matching candidates */
+  candidates: Candidate[];
+  /** Total number of candidates found (may be more than returned) */
+  totalFound: number;
+  /** Criteria used for the search */
+  searchCriteria: {
+    companyId: string;
+    region?: string;
+    industryHint?: string;
+  };
+  /** Mode indicator */
+  mode: 'stub' | 'real';
+}
+
+// ============================================================
+// Candidate Client Interface
+// ============================================================
+
+/**
+ * Interface for candidate search client implementations
+ */
+export interface ICandidateClient {
   /**
    * Search for candidates matching a company profile
    *
    * @param profile - Company profile to match against
-   * @returns Array of matching candidates with rationale
+   * @param options - Optional search parameters
+   * @returns Search result with candidates and metadata
    */
-  async searchCandidates(profile: CompanyProfile): Promise<Candidate[]> {
-    if (this.isStub) {
-      return this.getStubCandidates(profile);
-    }
-
-    // TODO: Implement actual candidate search API
-    throw new Error('Real candidate search not implemented');
-  }
+  searchCandidates(
+    profile: CompanyProfile,
+    options?: CandidateSearchOptions
+  ): Promise<CandidateSearchResult>;
 
   /**
-   * Get stub candidates filtered by profile
+   * Validate a candidate's rationale for quality
+   * Checks if reasonTags and evidenceFields are valid
+   *
+   * @param candidate - Candidate to validate
+   * @returns true if rationale is valid
    */
-  private getStubCandidates(profile: CompanyProfile): Candidate[] {
-    // Filter candidates by region if available
-    const region = profile.facts.location.region;
-
-    let candidates = [...DUMMY_CANDIDATES];
-
-    if (region) {
-      // Prioritize candidates in the same region
-      candidates = candidates.map(c => ({
-        ...c,
-        rationale: {
-          ...c.rationale,
-          reasonTags: c.location === region
-            ? [...c.rationale.reasonTags, '勤務地一致']
-            : c.rationale.reasonTags.filter(t => t !== '勤務地一致'),
-        },
-      }));
-    }
-
-    // Add company-specific evidence
-    return candidates.map(c => ({
-      ...c,
-      rationale: {
-        ...c.rationale,
-        evidenceFields: [
-          ...c.rationale.evidenceFields,
-          `company.companyId=${profile.facts.companyId}`,
-        ],
-      },
-    }));
-  }
+  validateRationale(candidate: Candidate): boolean;
 
   /**
    * Check if running in stub mode
    */
-  isStubMode(): boolean {
-    return this.isStub;
-  }
+  isStubMode(): boolean;
+
+  /**
+   * Get the current mode
+   */
+  getMode(): 'stub' | 'real';
 }
 
-export default CandidateClient;
+// ============================================================
+// Validation Helpers
+// ============================================================
+
+/**
+ * Check if a reason tag is valid
+ */
+export function isValidReasonTag(tag: string): tag is ValidReasonTag {
+  return (VALID_REASON_TAGS as readonly string[]).includes(tag);
+}
+
+/**
+ * Check if an evidence field matches valid patterns
+ */
+export function isValidEvidenceField(field: string): boolean {
+  // Exact match
+  if ((VALID_EVIDENCE_PATTERNS as readonly string[]).includes(field)) {
+    return true;
+  }
+
+  // Pattern match (e.g., "company.companyId=123" matches "company.companyId")
+  return VALID_EVIDENCE_PATTERNS.some(pattern => field.startsWith(pattern));
+}
+
+/**
+ * Validate a candidate's rationale
+ * Returns validation result with details
+ */
+export function validateCandidateRationale(candidate: Candidate): {
+  valid: boolean;
+  invalidReasonTags: string[];
+  invalidEvidenceFields: string[];
+} {
+  const invalidReasonTags = candidate.rationale.reasonTags.filter(
+    tag => !isValidReasonTag(tag)
+  );
+
+  const invalidEvidenceFields = candidate.rationale.evidenceFields.filter(
+    field => !isValidEvidenceField(field)
+  );
+
+  return {
+    valid: invalidReasonTags.length === 0 && invalidEvidenceFields.length === 0,
+    invalidReasonTags,
+    invalidEvidenceFields,
+  };
+}
