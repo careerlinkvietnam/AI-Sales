@@ -5,7 +5,7 @@
  *
  * 設計原則:
  * - デフォルトは送信しない（ENABLE_AUTO_SEND=false）
- * - 緊急停止スイッチ（KILL_SWITCH=true）で即無効化
+ * - 緊急停止スイッチ（KILL_SWITCH=true or RuntimeKillSwitch）で即無効化
  * - allowlistで宛先を限定（未設定なら全て禁止）
  * - 日次レート制限で送信数を制御
  *
@@ -15,7 +15,13 @@
  * - SEND_ALLOWLIST_DOMAINS: カンマ区切りのドメイン（例: "example.com,test.co.jp"）
  * - SEND_ALLOWLIST_EMAILS: カンマ区切りのメール（例: "a@x.com,b@y.com"）
  * - SEND_MAX_PER_DAY: 日次最大送信数（デフォルト: 20）
+ *
+ * ファイルベースキルスイッチ:
+ * - data/kill_switch.json が存在し enabled=true なら送信無効
+ * - CLI (run_ops stop-send/resume-send) で操作可能
  */
+
+import { getRuntimeKillSwitch } from './RuntimeKillSwitch';
 
 /**
  * Deny reason types
@@ -23,6 +29,7 @@
 export type SendDenyReason =
   | 'not_enabled'
   | 'kill_switch'
+  | 'runtime_kill_switch'
   | 'allowlist'
   | 'rate_limit'
   | 'no_allowlist_configured';
@@ -105,10 +112,21 @@ export class SendPolicy {
   }
 
   /**
-   * Check if sending is enabled (ENABLE_AUTO_SEND && !KILL_SWITCH)
+   * Check if sending is enabled
+   * Requires: ENABLE_AUTO_SEND && !KILL_SWITCH && !RuntimeKillSwitch
    */
   isSendingEnabled(): boolean {
-    return this.enableAutoSend && !this.killSwitch;
+    if (!this.enableAutoSend) return false;
+    if (this.killSwitch) return false;
+    if (getRuntimeKillSwitch().isEnabled()) return false;
+    return true;
+  }
+
+  /**
+   * Check if runtime kill switch is active (file-based)
+   */
+  isRuntimeKillSwitchActive(): boolean {
+    return getRuntimeKillSwitch().isEnabled();
   }
 
   /**
@@ -164,16 +182,26 @@ export class SendPolicy {
    * @returns Policy check result
    */
   checkSendPermission(toEmail: string, todayCount: number): SendPolicyResult {
-    // Check 1: Kill switch
+    // Check 1: Environment kill switch
     if (this.killSwitch) {
       return {
         allowed: false,
         reason: 'kill_switch',
-        details: 'Emergency kill switch is active',
+        details: 'Emergency kill switch is active (env KILL_SWITCH=true)',
       };
     }
 
-    // Check 2: Sending enabled
+    // Check 2: Runtime kill switch (file-based)
+    if (getRuntimeKillSwitch().isEnabled()) {
+      const state = getRuntimeKillSwitch().getState();
+      return {
+        allowed: false,
+        reason: 'runtime_kill_switch',
+        details: `Runtime kill switch is active: ${state?.reason || 'unknown reason'}`,
+      };
+    }
+
+    // Check 3: Sending enabled
     if (!this.enableAutoSend) {
       return {
         allowed: false,
@@ -182,7 +210,7 @@ export class SendPolicy {
       };
     }
 
-    // Check 3: Allowlist configured
+    // Check 4: Allowlist configured
     if (!this.hasAllowlistConfigured()) {
       return {
         allowed: false,
@@ -191,7 +219,7 @@ export class SendPolicy {
       };
     }
 
-    // Check 4: Recipient in allowlist
+    // Check 5: Recipient in allowlist
     if (!this.isRecipientAllowed(toEmail)) {
       const domain = this.extractDomain(toEmail) || 'unknown';
       return {
@@ -201,7 +229,7 @@ export class SendPolicy {
       };
     }
 
-    // Check 5: Rate limit
+    // Check 6: Rate limit
     const rateLimit = this.checkRateLimit(todayCount);
     if (!rateLimit.allowed) {
       return {
@@ -220,6 +248,7 @@ export class SendPolicy {
   getConfig(): {
     enableAutoSend: boolean;
     killSwitch: boolean;
+    runtimeKillSwitch: boolean;
     allowlistDomains: string[];
     allowlistEmails: string[];
     maxPerDay: number;
@@ -227,6 +256,7 @@ export class SendPolicy {
     return {
       enableAutoSend: this.enableAutoSend,
       killSwitch: this.killSwitch,
+      runtimeKillSwitch: getRuntimeKillSwitch().isEnabled(),
       allowlistDomains: Array.from(this.allowlistDomains),
       allowlistEmails: Array.from(this.allowlistEmails),
       maxPerDay: this.maxPerDay,

@@ -24,6 +24,8 @@ import * as path from 'path';
 import { ExperimentSafetyCheck } from '../jobs/ExperimentSafetyCheck';
 import { ExperimentScheduler } from '../domain/ExperimentScheduler';
 import { getSendPolicy } from '../domain/SendPolicy';
+import { getRuntimeKillSwitch } from '../domain/RuntimeKillSwitch';
+import { getMetricsStore } from '../data/MetricsStore';
 
 // Load environment variables
 config();
@@ -602,6 +604,225 @@ program
       if (!json) {
         console.error('Send failed:', (error as Error).message);
       }
+      process.exit(1);
+    }
+  });
+
+// ============================================================
+// Subcommand: stop-send
+// ============================================================
+program
+  .command('stop-send')
+  .description('Emergency stop: Immediately stop all sending via RuntimeKillSwitch')
+  .requiredOption('--reason <reason>', 'Reason for stopping (e.g., "reply_rate drop", "incident")')
+  .requiredOption('--set-by <name>', 'Name/ID of operator')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    const killSwitch = getRuntimeKillSwitch();
+    const metrics = getMetricsStore();
+    const json = opts.json || false;
+
+    // Enable kill switch
+    killSwitch.setEnabled(opts.reason, opts.setBy);
+
+    // Record metrics
+    metrics.recordOpsStopSend({
+      reason: opts.reason,
+      setBy: opts.setBy,
+    });
+
+    const state = killSwitch.getState();
+
+    if (json) {
+      console.log(JSON.stringify({
+        success: true,
+        action: 'stop-send',
+        killSwitchEnabled: true,
+        reason: opts.reason,
+        setBy: opts.setBy,
+        setAt: state?.set_at,
+        filePath: killSwitch.getFilePath(),
+      }, null, 2));
+    } else {
+      console.log('='.repeat(60));
+      console.log('EMERGENCY STOP ACTIVATED');
+      console.log('='.repeat(60));
+      console.log('');
+      console.log('All sending has been stopped.');
+      console.log('');
+      console.log(`Reason: ${opts.reason}`);
+      console.log(`Set by: ${opts.setBy}`);
+      console.log(`Set at: ${state?.set_at}`);
+      console.log(`File: ${killSwitch.getFilePath()}`);
+      console.log('');
+      console.log('To resume sending, run:');
+      console.log('  npx ts-node src/cli/run_ops.ts resume-send --reason "..." --set-by "..."');
+    }
+  });
+
+// ============================================================
+// Subcommand: resume-send
+// ============================================================
+program
+  .command('resume-send')
+  .description('Resume sending: Disable RuntimeKillSwitch')
+  .requiredOption('--reason <reason>', 'Reason for resuming (e.g., "issue resolved", "false alarm")')
+  .requiredOption('--set-by <name>', 'Name/ID of operator')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    const killSwitch = getRuntimeKillSwitch();
+    const metrics = getMetricsStore();
+    const json = opts.json || false;
+
+    const previousState = killSwitch.getState();
+
+    // Disable kill switch
+    killSwitch.setDisabled(opts.reason, opts.setBy);
+
+    // Record metrics
+    metrics.recordOpsResumeSend({
+      reason: opts.reason,
+      setBy: opts.setBy,
+    });
+
+    const newState = killSwitch.getState();
+
+    if (json) {
+      console.log(JSON.stringify({
+        success: true,
+        action: 'resume-send',
+        killSwitchEnabled: false,
+        previousEnabled: previousState?.enabled ?? false,
+        reason: opts.reason,
+        setBy: opts.setBy,
+        setAt: newState?.set_at,
+        filePath: killSwitch.getFilePath(),
+      }, null, 2));
+    } else {
+      console.log('='.repeat(60));
+      console.log('SENDING RESUMED');
+      console.log('='.repeat(60));
+      console.log('');
+      console.log('Sending has been enabled (RuntimeKillSwitch disabled).');
+      console.log('');
+      console.log(`Reason: ${opts.reason}`);
+      console.log(`Set by: ${opts.setBy}`);
+      console.log(`Set at: ${newState?.set_at}`);
+      console.log('');
+      console.log('Note: Sending will only work if:');
+      console.log('  - ENABLE_AUTO_SEND=true');
+      console.log('  - KILL_SWITCH=false (or not set)');
+      console.log('  - Recipient is in allowlist');
+      console.log('');
+      console.log('Check status:');
+      console.log('  npx ts-node src/cli/run_ops.ts stop-status');
+    }
+  });
+
+// ============================================================
+// Subcommand: stop-status
+// ============================================================
+program
+  .command('stop-status')
+  .description('Show current kill switch and send policy status')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    const killSwitch = getRuntimeKillSwitch();
+    const policy = getSendPolicy();
+    const config = policy.getConfig();
+    const state = killSwitch.getState();
+    const json = opts.json || false;
+
+    const status = {
+      sendingEnabled: policy.isSendingEnabled(),
+      envEnableAutoSend: config.enableAutoSend,
+      envKillSwitch: config.killSwitch,
+      runtimeKillSwitch: {
+        enabled: killSwitch.isEnabled(),
+        reason: state?.reason || null,
+        setBy: state?.set_by || null,
+        setAt: state?.set_at || null,
+        filePath: killSwitch.getFilePath(),
+        fileExists: state !== null,
+      },
+      allowlist: {
+        domainsCount: config.allowlistDomains.length,
+        emailsCount: config.allowlistEmails.length,
+        domains: config.allowlistDomains,
+        emails: config.allowlistEmails.map(e => e.replace(/^(.{3}).*@/, '$1***@')), // Mask emails
+      },
+      rateLimit: {
+        maxPerDay: config.maxPerDay,
+      },
+    };
+
+    if (json) {
+      console.log(JSON.stringify(status, null, 2));
+    } else {
+      console.log('='.repeat(60));
+      console.log('Send Policy Status');
+      console.log('='.repeat(60));
+      console.log('');
+      console.log(`Overall Sending: ${status.sendingEnabled ? 'ENABLED' : 'DISABLED'}`);
+      console.log('');
+      console.log('Kill Switches:');
+      console.log(`  Environment (KILL_SWITCH): ${status.envKillSwitch ? 'ACTIVE (blocking)' : 'Inactive'}`);
+      console.log(`  Runtime (file-based): ${status.runtimeKillSwitch.enabled ? 'ACTIVE (blocking)' : 'Inactive'}`);
+      if (status.runtimeKillSwitch.enabled && state) {
+        console.log(`    Reason: ${state.reason}`);
+        console.log(`    Set by: ${state.set_by}`);
+        console.log(`    Set at: ${state.set_at}`);
+      }
+      console.log('');
+      console.log('Configuration:');
+      console.log(`  ENABLE_AUTO_SEND: ${status.envEnableAutoSend}`);
+      console.log(`  Allowlist Domains: ${status.allowlist.domainsCount}`);
+      console.log(`  Allowlist Emails: ${status.allowlist.emailsCount}`);
+      console.log(`  Max Per Day: ${status.rateLimit.maxPerDay}`);
+      console.log('');
+      if (!status.sendingEnabled) {
+        console.log('To enable sending:');
+        if (!status.envEnableAutoSend) {
+          console.log('  - Set ENABLE_AUTO_SEND=true in .env');
+        }
+        if (status.envKillSwitch) {
+          console.log('  - Set KILL_SWITCH=false in .env');
+        }
+        if (status.runtimeKillSwitch.enabled) {
+          console.log('  - Run: npx ts-node src/cli/run_ops.ts resume-send --reason "..." --set-by "..."');
+        }
+      }
+    }
+  });
+
+// ============================================================
+// Subcommand: rollback
+// ============================================================
+program
+  .command('rollback')
+  .description('Stop an experiment and optionally stop all sending')
+  .requiredOption('--experiment <id>', 'Experiment ID to roll back')
+  .requiredOption('--reason <reason>', 'Reason for rollback')
+  .requiredOption('--set-by <name>', 'Name/ID of operator')
+  .option('--stop-send', 'Also stop all sending via RuntimeKillSwitch')
+  .option('--dry-run', 'Show what would be done without making changes')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    console.log('Running: rollback_experiment');
+    console.log('');
+
+    const args: string[] = [];
+    args.push('--experiment', opts.experiment);
+    args.push('--reason', opts.reason);
+    args.push('--set-by', opts.setBy);
+    if (opts.stopSend) args.push('--stop-send');
+    if (opts.dryRun) args.push('--dry-run');
+    if (opts.json) args.push('--json');
+
+    try {
+      await execCli('rollback_experiment', args);
+    } catch (error) {
+      console.error('Rollback failed:', (error as Error).message);
       process.exit(1);
     }
   });

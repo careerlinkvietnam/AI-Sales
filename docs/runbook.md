@@ -1010,6 +1010,11 @@ npx ts-node src/cli/run_ops.ts <subcommand> [options]
 | `safety` | 実験安全性チェック | ExperimentSafetyCheck |
 | `status` | 実験ステータス確認 | ExperimentScheduler |
 | `send` | 下書き送信（限定パイロット） | send_draft.ts |
+| `approve-send` | 承認→送信ワンコマンド | approve_send.ts + send_draft.ts |
+| `stop-send` | 緊急停止（RuntimeKillSwitch有効化） | RuntimeKillSwitch |
+| `resume-send` | 送信再開（RuntimeKillSwitch無効化） | RuntimeKillSwitch |
+| `stop-status` | キルスイッチ/送信ポリシー状態確認 | SendPolicy + RuntimeKillSwitch |
+| `rollback` | 実験ロールバック | rollback_experiment.ts |
 
 #### scan サブコマンド
 
@@ -1317,6 +1322,25 @@ npx ts-node src/cli/send_draft.ts \
 
 #### 緊急停止手順
 
+**方法1: RuntimeKillSwitch（推奨、即時反映）**
+
+```bash
+# 停止
+npx ts-node src/cli/run_ops.ts stop-send \
+  --reason "reply_rate drop" \
+  --set-by "operator-name"
+
+# 確認
+npx ts-node src/cli/run_ops.ts stop-status
+
+# 再開
+npx ts-node src/cli/run_ops.ts resume-send \
+  --reason "issue resolved" \
+  --set-by "operator-name"
+```
+
+**方法2: 環境変数（再起動が必要）**
+
 ```bash
 # 1. .env に KILL_SWITCH=true を設定
 echo "KILL_SWITCH=true" >> .env
@@ -1330,6 +1354,232 @@ npx ts-node src/cli/run_ops.ts send \
   --to "any@any.com" \
   --approval-token "any"
 # → "kill_switch" でブロックされることを確認
+```
+
+**キルスイッチの優先順位**:
+1. 環境変数 `KILL_SWITCH=true` → 最優先でブロック（`kill_switch`）
+2. RuntimeKillSwitch（`data/kill_switch.json`）→ 次にチェック（`runtime_kill_switch`）
+
+#### stop-send サブコマンド
+
+送信を緊急停止します（RuntimeKillSwitchを有効化）。
+
+```bash
+npx ts-node src/cli/run_ops.ts stop-send \
+  --reason "reply_rate drop" \
+  --set-by "operator-name"
+```
+
+**オプション**:
+
+| オプション | 説明 | 必須 |
+|------------|------|------|
+| `--reason <reason>` | 停止理由 | ✓ |
+| `--set-by <name>` | 操作者名/ID | ✓ |
+| `--json` | JSON出力 | - |
+
+**動作**:
+- `data/kill_switch.json` を作成し、`enabled=true` を設定
+- `OPS_STOP_SEND` メトリクスイベントを記録
+- 以降の送信は `runtime_kill_switch` でブロック
+
+#### resume-send サブコマンド
+
+停止した送信を再開します（RuntimeKillSwitchを無効化）。
+
+```bash
+npx ts-node src/cli/run_ops.ts resume-send \
+  --reason "issue resolved" \
+  --set-by "operator-name"
+```
+
+**オプション**:
+
+| オプション | 説明 | 必須 |
+|------------|------|------|
+| `--reason <reason>` | 再開理由 | ✓ |
+| `--set-by <name>` | 操作者名/ID | ✓ |
+| `--json` | JSON出力 | - |
+
+**動作**:
+- `data/kill_switch.json` の `enabled=false` を設定
+- `OPS_RESUME_SEND` メトリクスイベントを記録
+- 送信ブロックが解除（他の条件を満たせば送信可能に）
+
+#### stop-status サブコマンド
+
+現在のキルスイッチと送信ポリシーの状態を確認します。
+
+```bash
+npx ts-node src/cli/run_ops.ts stop-status
+```
+
+**出力例**:
+
+```
+============================================================
+Send Policy Status
+============================================================
+
+Overall Sending: DISABLED
+
+Kill Switches:
+  Environment (KILL_SWITCH): Inactive
+  Runtime (file-based): ACTIVE (blocking)
+    Reason: reply_rate drop
+    Set by: operator-name
+    Set at: 2026-01-26T10:00:00.000Z
+
+Configuration:
+  ENABLE_AUTO_SEND: true
+  Allowlist Domains: 2
+  Allowlist Emails: 1
+  Max Per Day: 20
+```
+
+#### rollback サブコマンド
+
+実験をロールバック（一時停止）し、オプションで送信も停止します。
+
+```bash
+# 実験のみロールバック
+npx ts-node src/cli/run_ops.ts rollback \
+  --experiment "ab_subject_cta_v1" \
+  --reason "reply_rate急落" \
+  --set-by "operator-name"
+
+# 実験ロールバック + 送信停止
+npx ts-node src/cli/run_ops.ts rollback \
+  --experiment "ab_subject_cta_v1" \
+  --reason "incident response" \
+  --set-by "operator-name" \
+  --stop-send
+
+# ドライラン（変更なし）
+npx ts-node src/cli/run_ops.ts rollback \
+  --experiment "ab_subject_cta_v1" \
+  --reason "test" \
+  --set-by "tester" \
+  --dry-run
+```
+
+**オプション**:
+
+| オプション | 説明 | 必須 |
+|------------|------|------|
+| `--experiment <id>` | 実験ID | ✓ |
+| `--reason <reason>` | ロールバック理由 | ✓ |
+| `--set-by <name>` | 操作者名/ID | ✓ |
+| `--stop-send` | 送信も停止（RuntimeKillSwitch有効化） | - |
+| `--dry-run` | 変更なし、確認のみ | - |
+| `--json` | JSON出力 | - |
+
+**動作**:
+- 実験の `status` を `paused` に変更
+- 実験の `endAt` を現在時刻に設定
+- `config/experiments.json` のバックアップを作成
+- `--stop-send` 時は RuntimeKillSwitch も有効化
+- `OPS_ROLLBACK` メトリクスイベントを記録
+
+### 7.19 RuntimeKillSwitch（ファイルベース緊急停止）
+
+`.env` を変更せずに、ファイルベースで送信を即座に停止できる機能です。
+
+#### ファイル形式（data/kill_switch.json）
+
+```json
+{
+  "enabled": true,
+  "reason": "reply_rate drop",
+  "set_by": "operator-name",
+  "set_at": "2026-01-26T10:00:00.000Z"
+}
+```
+
+#### 設計方針
+
+- **ファイルが存在しない場合**: 送信許可（デフォルト）
+- **`enabled=true`**: 送信停止
+- **`enabled=false`**: 送信許可（停止解除）
+- **ファイル読み込み失敗**: 安全側で停止（fail-safe）
+
+#### CLI操作
+
+```bash
+# 停止
+npx ts-node src/cli/run_ops.ts stop-send --reason "..." --set-by "..."
+
+# 再開
+npx ts-node src/cli/run_ops.ts resume-send --reason "..." --set-by "..."
+
+# 状態確認
+npx ts-node src/cli/run_ops.ts stop-status
+```
+
+#### 環境変数KILLSWITCHとの違い
+
+| 項目 | 環境変数 (KILL_SWITCH) | RuntimeKillSwitch |
+|------|------------------------|-------------------|
+| 設定方法 | .env または export | CLI または ファイル編集 |
+| 反映タイミング | プロセス再起動時 | 即時 |
+| ブロック理由 | `kill_switch` | `runtime_kill_switch` |
+| 優先度 | 高（先にチェック） | 低（後にチェック） |
+| 操作ログ | なし | メトリクスに記録 |
+
+**推奨**: 緊急時は `stop-send` CLIを使用（即時反映、操作ログあり）
+
+### 7.20 実験ロールバック（rollback_experiment CLI）
+
+問題が発生した実験を一時停止し、送信も停止できるCLIです。
+
+#### 使用タイミング
+
+- 返信率が急激に低下した場合
+- メール内容に問題が発見された場合
+- 外部要因で実験を中断する必要がある場合
+
+#### 実行方法
+
+```bash
+# 実験のみ一時停止
+npx ts-node src/cli/rollback_experiment.ts \
+  --experiment "ab_subject_cta_v1" \
+  --reason "返信率が2%を下回ったため" \
+  --set-by "田中太郎"
+
+# 実験停止 + 送信停止
+npx ts-node src/cli/rollback_experiment.ts \
+  --experiment "ab_subject_cta_v1" \
+  --reason "緊急: 送信内容に問題発見" \
+  --set-by "田中太郎" \
+  --stop-send
+```
+
+#### 動作詳細
+
+1. `config/experiments.json` のバックアップを `data/backups/` に作成
+2. 対象実験の `status` を `paused` に変更
+3. `endAt` を現在時刻に設定
+4. `description` にロールバック記録を追記
+5. `--stop-send` 時は RuntimeKillSwitch を有効化
+6. `OPS_ROLLBACK` メトリクスイベントを記録
+
+#### 復旧手順
+
+```bash
+# 1. 問題を解決
+
+# 2. 送信を再開（--stop-send を使った場合）
+npx ts-node src/cli/run_ops.ts resume-send \
+  --reason "問題解決、送信再開" \
+  --set-by "田中太郎"
+
+# 3. 実験を再開（experiments.json を編集）
+# "status": "paused" → "status": "running"
+# "endAt": null または将来の日時
+
+# 4. 状態確認
+npx ts-node src/cli/run_ops.ts status
 ```
 
 ### 7.17 推奨送信ワークフロー
@@ -1500,31 +1750,73 @@ npx ts-node src/cli/run_ops.ts status --all
 
 ### 8.4 緊急時対応
 
-**返信率が急落した場合**:
+#### 全送信を即座に停止する場合
+
+```bash
+# RuntimeKillSwitch で即時停止（推奨）
+npx ts-node src/cli/run_ops.ts stop-send \
+  --reason "問題発生のため緊急停止" \
+  --set-by "担当者名"
+
+# 状態確認
+npx ts-node src/cli/run_ops.ts stop-status
+
+# 問題解決後に再開
+npx ts-node src/cli/run_ops.ts resume-send \
+  --reason "問題解決のため再開" \
+  --set-by "担当者名"
+```
+
+#### 返信率が急落した場合
 
 ```bash
 # 1. 安全性チェック
 npx ts-node src/cli/run_ops.ts safety --experiment "ab_subject_cta_v1"
 
-# 2. rollback_recommended の場合
-# → experiments.json の status を "paused" に変更
-# → 原因調査後、終了または再開を判断
+# 2. rollback_recommended の場合 → 実験ロールバック
+npx ts-node src/cli/run_ops.ts rollback \
+  --experiment "ab_subject_cta_v1" \
+  --reason "返信率急落のため" \
+  --set-by "担当者名"
+
+# 3. 送信も含めて緊急停止する場合
+npx ts-node src/cli/run_ops.ts rollback \
+  --experiment "ab_subject_cta_v1" \
+  --reason "返信率急落のため" \
+  --set-by "担当者名" \
+  --stop-send
 ```
 
-**実験を一時停止する場合**:
+#### 実験を一時停止する場合
 
 ```bash
-# experiments.json を編集
+# CLI で実行（推奨）
+npx ts-node src/cli/run_ops.ts rollback \
+  --experiment "ab_subject_cta_v1" \
+  --reason "調査のため一時停止" \
+  --set-by "担当者名"
+
+# または experiments.json を手動編集
 # "status": "running" → "status": "paused"
 ```
 
-**実験を終了する場合**:
+#### 実験を終了する場合
 
 ```bash
 # experiments.json を編集
 # "status": "running" → "status": "ended"
 # "endDate": "2026-01-26"
 ```
+
+#### 緊急時対応チェックリスト
+
+1. [ ] `stop-status` で現在の状態を確認
+2. [ ] 必要に応じて `stop-send` で送信停止
+3. [ ] 問題の実験を特定し `safety` でチェック
+4. [ ] 必要に応じて `rollback` で実験停止
+5. [ ] 原因調査
+6. [ ] 問題解決後、`resume-send` で送信再開
+7. [ ] 必要に応じて experiments.json を編集して実験再開
 
 ---
 
@@ -1553,3 +1845,4 @@ npx ts-node src/cli/run_ops.ts safety --experiment "ab_subject_cta_v1"
 | 2026-01-26 | P3-7: 実験ライフサイクル管理（status, startAt, endAt, rollbackRule, ExperimentScheduler, ExperimentSafetyCheck, run_ops CLI, 日次/週次ルーチン） |
 | 2026-01-26 | P4-1: 自動送信（限定パイロット）- SendPolicy, PreSendGate, send_draft CLI, AUTO_SEND_* メトリクス、緊急停止機能 |
 | 2026-01-26 | P4-2: 承認→送信ワンコマンド化 - DraftRegistry, approve_send CLI, approve-send サブコマンド、tracking_id紐付け強制 |
+| 2026-01-26 | P4-3: 緊急停止とロールバック - RuntimeKillSwitch, stop-send/resume-send/stop-status/rollback サブコマンド, rollback_experiment CLI, OPS_STOP_SEND/OPS_RESUME_SEND/OPS_ROLLBACK メトリクス |

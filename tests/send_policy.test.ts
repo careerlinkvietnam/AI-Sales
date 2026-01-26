@@ -2,21 +2,35 @@
  * SendPolicy Tests
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   SendPolicy,
   createTestSendPolicy,
   getSendPolicy,
   resetSendPolicy,
 } from '../src/domain/SendPolicy';
+import {
+  resetRuntimeKillSwitch,
+  getRuntimeKillSwitch,
+} from '../src/domain/RuntimeKillSwitch';
 
 describe('SendPolicy', () => {
+  const killSwitchPath = path.join('data', 'kill_switch.json');
+
   afterEach(() => {
     resetSendPolicy();
+    resetRuntimeKillSwitch();
     delete process.env.ENABLE_AUTO_SEND;
     delete process.env.KILL_SWITCH;
     delete process.env.SEND_ALLOWLIST_DOMAINS;
     delete process.env.SEND_ALLOWLIST_EMAILS;
     delete process.env.SEND_MAX_PER_DAY;
+
+    // Clean up kill switch file
+    if (fs.existsSync(killSwitchPath)) {
+      fs.unlinkSync(killSwitchPath);
+    }
   });
 
   describe('isSendingEnabled', () => {
@@ -254,6 +268,94 @@ describe('SendPolicy', () => {
       resetSendPolicy();
       const policy2 = getSendPolicy();
       expect(policy1).not.toBe(policy2);
+    });
+  });
+
+  describe('RuntimeKillSwitch integration', () => {
+    it('isSendingEnabled returns false when RuntimeKillSwitch is active', () => {
+      const ks = getRuntimeKillSwitch();
+      ks.setEnabled('test', 'tester');
+
+      const policy = createTestSendPolicy({ enableAutoSend: true });
+      expect(policy.isSendingEnabled()).toBe(false);
+    });
+
+    it('isSendingEnabled returns true when RuntimeKillSwitch is not active', () => {
+      // Ensure no kill switch file exists
+      const ks = getRuntimeKillSwitch();
+      ks.clear();
+
+      const policy = createTestSendPolicy({ enableAutoSend: true });
+      expect(policy.isSendingEnabled()).toBe(true);
+    });
+
+    it('isRuntimeKillSwitchActive returns correct status', () => {
+      const policy = createTestSendPolicy({ enableAutoSend: true });
+      expect(policy.isRuntimeKillSwitchActive()).toBe(false);
+
+      const ks = getRuntimeKillSwitch();
+      ks.setEnabled('test', 'tester');
+
+      expect(policy.isRuntimeKillSwitchActive()).toBe(true);
+    });
+
+    it('checkSendPermission denies with runtime_kill_switch reason', () => {
+      const ks = getRuntimeKillSwitch();
+      ks.setEnabled('reply_rate drop', 'operator');
+
+      const policy = createTestSendPolicy({
+        enableAutoSend: true,
+        allowlistDomains: ['test.com'],
+      });
+
+      const result = policy.checkSendPermission('user@test.com', 0);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('runtime_kill_switch');
+      expect(result.details).toContain('reply_rate drop');
+    });
+
+    it('env kill switch takes priority over runtime kill switch', () => {
+      // Both are active, env should be checked first
+      const ks = getRuntimeKillSwitch();
+      ks.setEnabled('runtime reason', 'admin');
+
+      const policy = createTestSendPolicy({
+        enableAutoSend: true,
+        killSwitch: true,
+        allowlistDomains: ['test.com'],
+      });
+
+      const result = policy.checkSendPermission('user@test.com', 0);
+      expect(result.reason).toBe('kill_switch'); // env kill_switch, not runtime_kill_switch
+    });
+
+    it('getConfig includes runtimeKillSwitch status', () => {
+      const ks = getRuntimeKillSwitch();
+      ks.setEnabled('test', 'tester');
+
+      const policy = createTestSendPolicy({ enableAutoSend: true });
+      const config = policy.getConfig();
+
+      expect(config.runtimeKillSwitch).toBe(true);
+    });
+
+    it('allows sending after RuntimeKillSwitch is disabled', () => {
+      const ks = getRuntimeKillSwitch();
+
+      // Enable
+      ks.setEnabled('issue', 'admin');
+      const policy = createTestSendPolicy({
+        enableAutoSend: true,
+        allowlistDomains: ['test.com'],
+      });
+      expect(policy.isSendingEnabled()).toBe(false);
+
+      // Disable
+      ks.setDisabled('issue resolved', 'admin');
+      expect(policy.isSendingEnabled()).toBe(true);
+
+      const result = policy.checkSendPermission('user@test.com', 0);
+      expect(result.allowed).toBe(true);
     });
   });
 });

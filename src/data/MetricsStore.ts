@@ -21,7 +21,10 @@ export type MetricEventType =
   | 'AUTO_SEND_ATTEMPT'
   | 'AUTO_SEND_SUCCESS'
   | 'AUTO_SEND_BLOCKED'
-  | 'SEND_APPROVED';
+  | 'SEND_APPROVED'
+  | 'OPS_STOP_SEND'
+  | 'OPS_RESUME_SEND'
+  | 'OPS_ROLLBACK';
 
 /**
  * Blocked reason types (for AUTO_SEND_BLOCKED events)
@@ -29,6 +32,7 @@ export type MetricEventType =
 export type SendBlockedReason =
   | 'not_enabled'
   | 'kill_switch'
+  | 'runtime_kill_switch'
   | 'allowlist'
   | 'rate_limit'
   | 'gate_failed'
@@ -303,6 +307,79 @@ export class MetricsStore {
         draftId: data.draftId,
         approvedBy: data.approvedBy,
         tokenFingerprint: data.tokenFingerprint,
+      },
+    });
+  }
+
+  /**
+   * Record OPS_STOP_SEND event (stop-send CLI)
+   */
+  recordOpsStopSend(data: {
+    reason: string;
+    setBy: string;
+  }): void {
+    this.appendEvent({
+      trackingId: 'ops',
+      companyId: 'ops',
+      templateId: 'ops',
+      abVariant: null,
+      eventType: 'OPS_STOP_SEND',
+      gmailThreadId: null,
+      replyLatencyHours: null,
+      meta: {
+        source: 'run_ops',
+        reason: data.reason,
+        setBy: data.setBy,
+      },
+    });
+  }
+
+  /**
+   * Record OPS_RESUME_SEND event (resume-send CLI)
+   */
+  recordOpsResumeSend(data: {
+    reason: string;
+    setBy: string;
+  }): void {
+    this.appendEvent({
+      trackingId: 'ops',
+      companyId: 'ops',
+      templateId: 'ops',
+      abVariant: null,
+      eventType: 'OPS_RESUME_SEND',
+      gmailThreadId: null,
+      replyLatencyHours: null,
+      meta: {
+        source: 'run_ops',
+        reason: data.reason,
+        setBy: data.setBy,
+      },
+    });
+  }
+
+  /**
+   * Record OPS_ROLLBACK event (rollback_experiment CLI)
+   */
+  recordOpsRollback(data: {
+    experimentId: string;
+    reason: string;
+    setBy: string;
+    stoppedSending: boolean;
+  }): void {
+    this.appendEvent({
+      trackingId: 'ops',
+      companyId: 'ops',
+      templateId: data.experimentId,
+      abVariant: null,
+      eventType: 'OPS_ROLLBACK',
+      gmailThreadId: null,
+      replyLatencyHours: null,
+      meta: {
+        source: 'rollback_experiment',
+        experimentId: data.experimentId,
+        reason: data.reason,
+        setBy: data.setBy,
+        stoppedSending: data.stoppedSending,
       },
     });
   }

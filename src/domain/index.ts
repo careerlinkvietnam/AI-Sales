@@ -122,3 +122,10 @@ export {
   getPreSendGate,
   createTestPreSendGate,
 } from './PreSendGate';
+export {
+  RuntimeKillSwitch,
+  KillSwitchState,
+  getRuntimeKillSwitch,
+  resetRuntimeKillSwitch,
+  createTestRuntimeKillSwitch,
+} from './RuntimeKillSwitch';
