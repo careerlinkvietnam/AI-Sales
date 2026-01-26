@@ -30,6 +30,14 @@ CRM_LOGIN_PASSWORD=<パスワード>
 GMAIL_CLIENT_ID=<OAuth2 Client ID>
 GMAIL_CLIENT_SECRET=<OAuth2 Client Secret>
 GMAIL_REFRESH_TOKEN=<OAuth2 Refresh Token>
+
+# Candidate API Configuration
+CANDIDATE_MODE=stub                # 'stub' or 'real' (default: stub)
+CANDIDATE_API_URL=                 # Required for real mode
+CANDIDATE_API_KEY=                 # Required for real mode
+
+# Approval Token Configuration
+APPROVAL_TOKEN_SECRET=<HMAC秘密鍵>  # 本番環境では必須
 ```
 
 ### 1.2 認証の優先順位
@@ -154,8 +162,49 @@ npx ts-node src/cli/run_one_company.ts --tag "南部・3月連絡" --json
 #### 動作モード
 
 1. **Gmail Stub Mode**: `GMAIL_*` 環境変数が未設定の場合、スタブIDを返します
-2. **Candidate Stub Mode**: 現在は常にスタブ候補者を返します（API連携は今後実装）
-3. **Dry Run Mode**: `--dry-run` でメール内容を確認できます
+2. **Candidate Stub Mode**: `CANDIDATE_MODE=stub`（デフォルト）の場合、スタブ候補者を返します
+3. **Candidate Real Mode**: `CANDIDATE_MODE=real` で実APIを使用（`CANDIDATE_API_URL`, `CANDIDATE_API_KEY`必須）
+4. **Dry Run Mode**: `--dry-run` でメール内容を確認できます
+
+### 2.5 run_daily_queue CLI (日次優先度キュー)
+
+タグで企業を検索し、優先度スコア順にリストを生成します。
+
+#### 基本使用法
+
+```bash
+# タグで検索し、上位20社を表示
+npx ts-node src/cli/run_daily_queue.ts --tag "南部・3月連絡" --top 20
+
+# JSON出力（スクリプト連携用）
+npx ts-node src/cli/run_daily_queue.ts --tag "南部・3月連絡" --json
+
+# 対話選択モード（企業を選択してパイプライン実行）
+npx ts-node src/cli/run_daily_queue.ts --tag "南部・3月連絡" --select
+
+# 全企業表示（既存顧客・要整備含む）
+npx ts-node src/cli/run_daily_queue.ts --tag "南部・3月連絡" --show-all
+```
+
+#### オプション
+
+| オプション | 説明 | デフォルト |
+|------------|------|-----------|
+| `--tag <tag>` | 検索するタグ（必須） | - |
+| `--top <n>` | 表示件数 | 20 |
+| `--json` | JSON出力のみ | false |
+| `--select` | 対話選択モード | false |
+| `--show-all` | 特殊バケット含む全件表示 | false |
+
+#### 優先度バケット
+
+| バケット | スコア範囲 | 説明 |
+|----------|-----------|------|
+| 高優先 | 70-100点 | 優先的に連絡すべき企業 |
+| 通常 | 40-69点 | 通常の連絡対象 |
+| 低優先 | 0-39点 | 後回しでもよい企業 |
+| 既存顧客 | - | 契約中の顧客（別管理） |
+| 要整備 | - | データ不備あり（メール未登録等） |
 
 ---
 
@@ -263,12 +312,77 @@ console.log(`Token: ${token ? '[SET]' : '[NOT SET]'}`);
 
 ---
 
-## 6. 連絡先
+## 6. メール生成機能
+
+### 6.1 B案仕様（候補者経歴要約）
+
+メール本文に候補者の経歴要約（careerSummary）を含めます。
+
+- 最大400文字
+- PII（個人情報）が含まれる場合は候補者を除外
+- 推薦理由は最大3つまで表示
+
+### 6.2 PII検出と除外
+
+ContentGuards モジュールが以下のPIIを検出し、該当候補者を除外します：
+
+- メールアドレス
+- 電話番号（日本形式）
+- 住所（日本語・ベトナム語）
+- 生年月日
+- 具体的な会社名
+
+除外された候補者は監査ログに記録されます。
+
+---
+
+## 7. 監査とログ
+
+### 7.1 監査ログ
+
+パイプライン実行のログは `logs/audit.ndjson` に記録されます。
+
+```bash
+# 最新のログを確認
+tail -10 logs/audit.ndjson | jq .
+```
+
+記録される情報：
+- タイムスタンプ
+- イベントタイプ（pipeline_run, draft_created, validation_failed）
+- 検索タグ
+- 企業ID（名前はハッシュ化）
+- 候補者の除外情報
+- 下書きID
+
+**注意**: logs/ ディレクトリは .gitignore に含まれています。
+
+### 7.2 Approval Token
+
+下書き作成時に承認トークンが生成されます。
+
+- HMAC-SHA256で署名
+- 24時間有効
+- 将来の送信機能のための準備（現在はドラフト作成のみ）
+
+本番環境では `APPROVAL_TOKEN_SECRET` 環境変数を必ず設定してください。
+
+### 7.3 ログに出してはいけない情報
+
+- パスワード、トークン
+- 候補者の氏名、連絡先、経歴詳細
+- 企業の連絡先メール
+- メール本文全体
+
+---
+
+## 8. 連絡先
 
 問題が解決しない場合は、以下を確認してください：
 
 1. `docs/system_map.md` - システム構成と API 仕様
-2. CRM 管理者に確認
+2. `docs/candidate_api.md` - 候補者API仕様
+3. CRM 管理者に確認
 
 ---
 
@@ -277,3 +391,4 @@ console.log(`Token: ${token ? '[SET]' : '[NOT SET]'}`);
 | 日付 | 更新内容 |
 |------|----------|
 | 2026-01-26 | 初版作成 |
+| 2026-01-26 | B案仕様追加（候補者経歴要約）、監査ログ、run_daily_queue CLI |

@@ -23,8 +23,10 @@ import { CrmClient, validateCrmConfig } from '../connectors/crm/CrmClient';
 import { createCandidateClient, ICandidateClient } from '../connectors/candidate';
 import { GmailClient, isGmailConfigured } from '../connectors/gmail/GmailClient';
 import { CompanyProfileBuilder } from '../domain/CompanyProfileBuilder';
-import { EmailComposer } from '../domain/EmailComposer';
+import { EmailComposer, ComposeResult } from '../domain/EmailComposer';
 import { TagNormalizer } from '../domain/TagNormalizer';
+import { getAuditLogger } from '../domain/AuditLogger';
+import { getApprovalTokenManager } from '../domain/ApprovalToken';
 import {
   AuthError,
   NetworkError,
@@ -76,14 +78,18 @@ interface PipelineResult {
   } | null;
   searchResultCount: number;
   candidatesCount: number;
+  candidatesIncluded: number;
+  candidatesExcluded: number;
   email: {
     subject: string;
     bodyPreview: string;
     bodyLength: number;
+    validationOk: boolean;
   } | null;
   gmailDraft: {
     draftId: string;
     isStub: boolean;
+    approvalToken?: string;
   } | null;
   errors: string[];
   mode: {
@@ -129,6 +135,8 @@ async function runPipeline(): Promise<PipelineResult> {
     company: null,
     searchResultCount: 0,
     candidatesCount: 0,
+    candidatesIncluded: 0,
+    candidatesExcluded: 0,
     email: null,
     gmailDraft: null,
     errors: [],
@@ -268,26 +276,46 @@ async function runPipeline(): Promise<PipelineResult> {
     }
 
     // ============================================================
-    // Step 7: Compose email
+    // Step 7: Compose email with audit
     // ============================================================
     log('Step 7: Composing email...');
 
     const emailComposer = new EmailComposer();
-    const email: EmailOutput = emailComposer.compose(companyProfile, candidates);
+    const composeResult: ComposeResult = emailComposer.composeWithAudit(companyProfile, candidates);
+    const email: EmailOutput = composeResult.email;
+
+    // Count included/excluded candidates
+    const includedCount = composeResult.candidateExclusions.filter(e => e.included).length;
+    const excludedCount = composeResult.candidateExclusions.filter(e => !e.included).length;
+    result.candidatesIncluded = includedCount;
+    result.candidatesExcluded = excludedCount;
 
     result.email = {
       subject: email.subject,
       bodyPreview: email.body.substring(0, 100) + (email.body.length > 100 ? '...' : ''),
       bodyLength: email.body.length,
+      validationOk: composeResult.validationResult.ok,
     };
 
     log(`   Subject: ${email.subject}`);
     logVerbose(`   Body length: ${email.body.length} chars`);
+    if (excludedCount > 0) {
+      log(`   Warning: ${excludedCount} candidate(s) excluded due to PII`);
+    }
+
+    // Log validation issues if any
+    if (!composeResult.validationResult.ok) {
+      logError(`   Email validation failed: ${composeResult.validationResult.violations.join(', ')}`);
+    }
 
     // ============================================================
     // Step 8: Create Gmail draft
     // ============================================================
     log('Step 8: Creating Gmail draft...');
+
+    const auditLogger = getAuditLogger();
+    const tokenManager = getApprovalTokenManager();
+    const mode = candidateClient.isStubMode() ? 'stub' : 'real';
 
     if (options.dryRun) {
       log('   Dry run mode - skipping Gmail draft');
@@ -297,6 +325,17 @@ async function runPipeline(): Promise<PipelineResult> {
       log('---');
       log(email.body);
       log('--- End Preview ---');
+
+      // Log pipeline run without draft
+      auditLogger.logPipelineRun({
+        tag: options.tag,
+        companyId: companyProfile.facts.companyId,
+        companyName: companyProfile.facts.companyName,
+        selectedCandidates: composeResult.candidateExclusions,
+        draftCreated: false,
+        mode,
+        metadata: { dryRun: true },
+      });
     } else {
       const gmailClient = new GmailClient();
 
@@ -309,12 +348,41 @@ async function runPipeline(): Promise<PipelineResult> {
         email.body
       );
 
+      // Generate approval token for future send authorization
+      const approvalToken = tokenManager.generateToken({
+        draftId: draftResult.draftId,
+        companyId: companyProfile.facts.companyId,
+        candidateCount: includedCount,
+        mode,
+      });
+
       result.gmailDraft = {
         draftId: draftResult.draftId,
         isStub: gmailClient.isStubMode(),
+        approvalToken,
       };
 
       log(`   Draft created: ${draftResult.draftId}${gmailClient.isStubMode() ? ' (stub mode)' : ''}`);
+
+      // Log pipeline run with draft
+      auditLogger.logPipelineRun({
+        tag: options.tag,
+        companyId: companyProfile.facts.companyId,
+        companyName: companyProfile.facts.companyName,
+        selectedCandidates: composeResult.candidateExclusions,
+        draftCreated: true,
+        gmailDraftId: draftResult.draftId,
+        mode,
+      });
+
+      // Log draft created event
+      auditLogger.logDraftCreated({
+        tag: options.tag,
+        companyId: companyProfile.facts.companyId,
+        gmailDraftId: draftResult.draftId,
+        candidateCount: includedCount,
+        mode,
+      });
     }
 
     // ============================================================
