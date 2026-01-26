@@ -85,3 +85,11 @@ export {
   TemplateProposal,
   createTemplateGenerator,
 } from './TemplateGenerator';
+export {
+  TemplateQualityGate,
+  TemplateContentForCheck,
+  QualityGateResult,
+  QualityGateConfig,
+  createTemplateQualityGate,
+  getTemplateQualityGate,
+} from './TemplateQualityGate';

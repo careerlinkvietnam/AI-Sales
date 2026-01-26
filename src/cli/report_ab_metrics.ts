@@ -39,7 +39,8 @@ program
   .option('--since <date>', 'Only include events since this date (ISO format)')
   .option('--json', 'Output results as JSON only')
   .option('--markdown', 'Output as Markdown table')
-  .option('--include-decision', 'Include statistical decision for experiments');
+  .option('--include-decision', 'Include statistical decision for experiments')
+  .option('--show-templates', 'Show active/proposed template status');
 
 program.parse();
 
@@ -60,6 +61,26 @@ interface TemplateMetrics {
 }
 
 /**
+ * Template status info
+ */
+interface TemplateStatusInfo {
+  templateId: string;
+  variant: 'A' | 'B';
+  status: string;
+}
+
+/**
+ * Experiment template status
+ */
+interface ExperimentTemplateStatus {
+  experimentId: string;
+  name: string;
+  activeTemplates: TemplateStatusInfo[];
+  proposedTemplates: TemplateStatusInfo[];
+  archivedCount: number;
+}
+
+/**
  * Full report structure
  */
 interface MetricsReport {
@@ -76,6 +97,7 @@ interface MetricsReport {
   };
   byTemplate: TemplateMetrics[];
   decisions?: EvaluationDecision[];
+  templateStatus?: ExperimentTemplateStatus[];
 }
 
 /**
@@ -205,6 +227,52 @@ function generateReport(events: MetricsEvent[]): MetricsReport {
     },
     byTemplate,
   };
+}
+
+/**
+ * Get template status from experiments registry
+ */
+function getTemplateStatus(): ExperimentTemplateStatus[] {
+  const evaluator = new ExperimentEvaluator();
+  const result: ExperimentTemplateStatus[] = [];
+
+  try {
+    const registry = evaluator.loadRegistry();
+
+    for (const experiment of registry.experiments) {
+      const activeTemplates: TemplateStatusInfo[] = [];
+      const proposedTemplates: TemplateStatusInfo[] = [];
+      let archivedCount = 0;
+
+      for (const template of experiment.templates) {
+        const info: TemplateStatusInfo = {
+          templateId: template.templateId,
+          variant: template.variant,
+          status: template.status,
+        };
+
+        if (template.status === 'active') {
+          activeTemplates.push(info);
+        } else if (template.status === 'proposed') {
+          proposedTemplates.push(info);
+        } else if (template.status === 'archived') {
+          archivedCount++;
+        }
+      }
+
+      result.push({
+        experimentId: experiment.experimentId,
+        name: experiment.name,
+        activeTemplates,
+        proposedTemplates,
+        archivedCount,
+      });
+    }
+  } catch {
+    // Silently skip if experiments.json doesn't exist
+  }
+
+  return result;
 }
 
 /**
@@ -342,6 +410,33 @@ function displayReport(report: MetricsReport): void {
       log('');
     }
   }
+
+  // Template Status
+  if (report.templateStatus && report.templateStatus.length > 0) {
+    log('Template Status:');
+    log('-'.repeat(70));
+    for (const exp of report.templateStatus) {
+      log(`  ${exp.experimentId} (${exp.name}):`);
+      log('    Active:');
+      if (exp.activeTemplates.length === 0) {
+        log('      (none)');
+      } else {
+        for (const t of exp.activeTemplates) {
+          log(`      - ${t.templateId} [${t.variant}]`);
+        }
+      }
+      log('    Proposed:');
+      if (exp.proposedTemplates.length === 0) {
+        log('      (none)');
+      } else {
+        for (const t of exp.proposedTemplates) {
+          log(`      - ${t.templateId} [${t.variant}]`);
+        }
+      }
+      log(`    Archived: ${exp.archivedCount}`);
+      log('');
+    }
+  }
 }
 
 /**
@@ -434,6 +529,31 @@ function displayMarkdown(report: MetricsReport): void {
       console.log('');
     }
   }
+
+  // Template Status
+  if (report.templateStatus && report.templateStatus.length > 0) {
+    console.log('## Template Status');
+    console.log('');
+
+    for (const exp of report.templateStatus) {
+      console.log(`### ${exp.experimentId}`);
+      console.log('');
+      console.log(`**${exp.name}**`);
+      console.log('');
+      console.log('| Status | Template ID | Variant |');
+      console.log('|--------|-------------|---------|');
+      for (const t of exp.activeTemplates) {
+        console.log(`| Active | ${t.templateId} | ${t.variant} |`);
+      }
+      for (const t of exp.proposedTemplates) {
+        console.log(`| Proposed | ${t.templateId} | ${t.variant} |`);
+      }
+      if (exp.archivedCount > 0) {
+        console.log(`| Archived | (${exp.archivedCount} templates) | - |`);
+      }
+      console.log('');
+    }
+  }
 }
 
 /**
@@ -456,6 +576,11 @@ async function main(): Promise<void> {
   // Add decisions if requested
   if (options.includeDecision) {
     report.decisions = addDecisions(report, events);
+  }
+
+  // Add template status if requested
+  if (options.showTemplates) {
+    report.templateStatus = getTemplateStatus();
   }
 
   if (options.json) {

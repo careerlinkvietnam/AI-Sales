@@ -797,8 +797,106 @@ npx ts-node src/cli/propose_templates.ts --experiment "ab_subject_cta_v1" --sinc
 **重要**:
 - 追加されるテンプレートの `status` は `"proposed"` です
 - `"proposed"` ステータスのテンプレートはA/B割当に使用されません
-- 手動で `status` を `"active"` に変更するまで有効化されません
+- `approve_templates.ts` CLI で承認するまで有効化されません
 - バックアップが `config/experiments.json.bak-YYYYMMDDHHmmss` に作成されます
+
+#### 制約事項
+
+- **自動昇格禁止**: 提案は `"proposed"` ステータスで追加され、自動的に有効化されません
+- **PII不使用**: 改善提案の生成にPIIは使用しません（テンプレートテキストのみ）
+- **ルールベース**: LLMを使用せず、事前定義された戦略パターンで生成します
+
+### 7.12 テンプレート承認（approve_templates）
+
+proposedステータスのテンプレートを承認し、activeに昇格します。
+
+#### 実行方法
+
+```bash
+# 基本実行（承認実行）
+npx ts-node src/cli/approve_templates.ts \
+  --experiment "ab_subject_cta_v1" \
+  --template-id "new_candidates_v1_B_add_urgency_abc123" \
+  --approved-by "山田太郎" \
+  --reason "南部セグメントで返信率向上が期待できるため"
+
+# チケット参照付き
+npx ts-node src/cli/approve_templates.ts \
+  --experiment "ab_subject_cta_v1" \
+  --template-id "new_candidates_v1_B_add_urgency_abc123" \
+  --approved-by "山田太郎" \
+  --reason "JIRA-456の承認に基づく" \
+  --ticket "JIRA-456"
+
+# ドライラン（変更なし、品質ゲートチェックのみ）
+npx ts-node src/cli/approve_templates.ts \
+  --experiment "ab_subject_cta_v1" \
+  --template-id "new_candidates_v1_B_add_urgency_abc123" \
+  --approved-by "山田太郎" \
+  --reason "テスト" \
+  --dry-run
+
+# JSON出力
+npx ts-node src/cli/approve_templates.ts \
+  --experiment "ab_subject_cta_v1" \
+  --template-id "..." \
+  --approved-by "..." \
+  --reason "..." \
+  --json
+```
+
+#### オプション
+
+| オプション | 説明 | 必須 |
+|------------|------|------|
+| `--experiment <id>` | 実験ID | ✓ |
+| `--template-id <id>` | 承認するテンプレートID | ✓ |
+| `--approved-by <name>` | 承認者名/ID | ✓ |
+| `--reason <reason>` | 承認理由 | ✓ |
+| `--ticket <ticket>` | 参照チケット（例: JIRA-123） | - |
+| `--dry-run` | 変更なし、チェックのみ | - |
+| `--json` | JSON出力のみ | - |
+
+#### 品質ゲート（TemplateQualityGate）
+
+承認前に以下のチェックが行われます。**1つでも違反があると承認不可**です。
+
+| チェック項目 | 内容 | 上限/禁止事項 |
+|--------------|------|---------------|
+| PII検出 | メール、電話、住所、生年月日 | 混入禁止 |
+| 件名長さ | subject_template | 80文字以下 |
+| CTA長さ | cta_template | 200文字以下 |
+| 見出し長さ | candidate_header_template | 80文字以下 |
+| 禁止表現 | 誇大表現・煽り | 「確実に」「絶対」「保証」「必ず」「100%」「今だけ」「限定」「緊急」等 |
+| トラッキングタグ | [CL-AI:xxxx] | テンプレートに含めない（自動付与されるため） |
+
+#### 承認時の動作
+
+1. 品質ゲートチェック実行
+2. 違反がある場合は中断（承認ログにfailを記録）
+3. 違反がない場合:
+   - `config/experiments.json.bak-YYYYMMDDHHmmss` にバックアップ作成
+   - 同一variantの現在activeテンプレートを `archived` に変更
+   - 対象テンプレートを `proposed` → `active` に変更
+   - 承認ログを `data/approvals.ndjson` に追記
+
+#### 承認ログ（data/approvals.ndjson）
+
+承認/拒否の監査ログが記録されます。**PIIは含まれません**。
+
+```json
+{
+  "timestamp": "2026-01-26T10:00:00.000Z",
+  "experimentId": "ab_subject_cta_v1",
+  "templateId": "new_candidates_v1_B_add_urgency_abc123",
+  "previousActiveTemplateId": "new_candidates_v1_B",
+  "approvedBy": "山田太郎",
+  "reason": "南部セグメントで返信率向上が期待できるため",
+  "ticket": "JIRA-456",
+  "qualityGateOk": true,
+  "violations": []
+}
+```
 
 #### 運用フロー（推奨）
 
@@ -806,14 +904,35 @@ npx ts-node src/cli/propose_templates.ts --experiment "ab_subject_cta_v1" --sinc
 2. **改善対象発見時**: `propose_templates.ts --dry-run` で提案内容を確認
 3. **問題なければ**: `propose_templates.ts` で提案を追加
 4. **提案レビュー**: `experiments.json` の提案内容を人間がレビュー
-5. **承認時**: 手動で `status: "proposed"` → `status: "active"` に変更
-6. **新テンプレートでA/Bテスト開始**
+5. **承認時**: `approve_templates.ts` で承認（品質ゲート通過必須）
+6. **翌週**: 新テンプレートでA/Bテスト稼働開始
 
-#### 制約事項
+#### テンプレートステータス確認
 
-- **自動昇格禁止**: 提案は `"proposed"` ステータスで追加され、自動的に有効化されません
-- **PII不使用**: 改善提案の生成にPIIは使用しません（テンプレートテキストのみ）
-- **ルールベース**: LLMを使用せず、事前定義された戦略パターンで生成します
+`report_ab_metrics.ts --show-templates` でactive/proposedのテンプレート一覧を確認できます。
+
+```bash
+npx ts-node src/cli/report_ab_metrics.ts --show-templates
+```
+
+出力例:
+```
+Template Status:
+----------------------------------------------------------------------
+  ab_subject_cta_v1 (Subject and CTA A/B Test v1):
+    Active:
+      - new_candidates_v1_A [A]
+      - new_candidates_v1_B [B]
+    Proposed:
+      - new_candidates_v1_B_add_urgency_abc123 [B]
+    Archived: 0
+```
+
+#### 重要な制約
+
+- **proposedはA/B割当されない**: `status="proposed"` のテンプレートは自動的にA/B割当に使用されません
+- **activeのみ割当対象**: ABAssignerは `status="active"` のテンプレートのみを使用します
+- **承認必須**: proposed → active への昇格は必ず `approve_templates.ts` を使用し、承認者・理由を記録してください
 
 ---
 
@@ -838,3 +957,4 @@ npx ts-node src/cli/propose_templates.ts --experiment "ab_subject_cta_v1" --sinc
 | 2026-01-26 | P3-3: A/B勝者判定（z検定）、昇格機能、experiments.json追加 |
 | 2026-01-26 | P3-4: セグメント別メトリクス、segments.json、探索的A/B判定追加 |
 | 2026-01-26 | P3-5: テンプレート改善提案自動生成（ImprovementPicker, TemplateGenerator, propose_templates CLI） |
+| 2026-01-26 | P3-6: テンプレート承認ワークフロー（TemplateQualityGate, approve_templates CLI, 承認ログ） |
