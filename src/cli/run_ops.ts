@@ -40,9 +40,11 @@ import {
   notifyOpsDailySummary,
   notifyOpsWeeklySummary,
   notifyOpsHealthSummary,
+  notifyOpsWeeklyReviewPack,
   NotificationEvent,
 } from '../notifications';
 import { getOpsSummaryBuilder, HealthInput, StepResult } from '../domain/OpsSummaryBuilder';
+import { getReviewPackBuilder, ReviewPack } from '../domain/ReviewPackBuilder';
 import { getIncidentManager, IncidentManager } from '../domain/IncidentManager';
 import { getResumeGate } from '../domain/ResumeGate';
 
@@ -2231,6 +2233,8 @@ export interface OpsScheduleConfig {
     fixes_top: number;
     notify_incidents: boolean;
     notify_fixes: boolean;
+    review_pack_enabled: boolean;
+    review_pack_notify: boolean;
   };
   health: {
     window_days: number;
@@ -2257,6 +2261,8 @@ export function loadOpsScheduleConfig(customConfigPath?: string): OpsScheduleCon
       fixes_top: 3,
       notify_incidents: true,
       notify_fixes: true,
+      review_pack_enabled: false,
+      review_pack_notify: false,
     },
     health: {
       window_days: 3,
@@ -2658,6 +2664,84 @@ program
         console.log('');
       }
 
+      // Step 5: Review Pack (optional)
+      if (config.weekly.review_pack_enabled) {
+        if (!json) {
+          console.log('Step 5: Generate review pack...');
+        }
+        try {
+          const reviewPackBuilder = getReviewPackBuilder();
+          const reviewPack = await reviewPackBuilder.build({ since });
+
+          // Determine output path
+          const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
+          const reviewOutputPath = path.join(process.cwd(), 'docs', 'reviews', `review_${today}.md`);
+
+          // Ensure output directory exists
+          const reviewDir = path.dirname(reviewOutputPath);
+          if (!require('fs').existsSync(reviewDir)) {
+            require('fs').mkdirSync(reviewDir, { recursive: true });
+          }
+
+          // Write markdown file
+          require('fs').writeFileSync(reviewOutputPath, reviewPack.markdown, 'utf-8');
+
+          results.steps.push({
+            name: 'review_pack',
+            success: true,
+            outputPath: reviewOutputPath,
+            kpi: reviewPack.kpi,
+            actionsCount: reviewPack.actions.length,
+          });
+
+          if (!json) {
+            console.log(`  Review pack saved to: ${reviewOutputPath}`);
+          }
+
+          // Send notification if enabled
+          if (config.weekly.review_pack_notify && execute) {
+            const kpiParts: string[] = [];
+            kpiParts.push(`sent=${reviewPack.kpi.sent}`);
+            kpiParts.push(`replies=${reviewPack.kpi.replies}`);
+            if (reviewPack.kpi.replyRate !== null) {
+              kpiParts.push(`rate=${(reviewPack.kpi.replyRate * 100).toFixed(1)}%`);
+            }
+            const kpiSummary = kpiParts.join(', ');
+
+            const severity = reviewPack.actions.some(a => a.priority === 'high')
+              ? 'error'
+              : reviewPack.actions.some(a => a.priority === 'medium')
+              ? 'warn'
+              : 'info';
+
+            await notifyOpsWeeklyReviewPack({
+              severity,
+              outputPath: reviewOutputPath,
+              kpiSummary,
+              topActions: reviewPack.actions.map(a => a.action),
+              meta: {
+                period: reviewPack.period,
+                actionsCount: reviewPack.actions.length,
+                openIncidents: reviewPack.incidents.openCount,
+                proposedFixes: reviewPack.fixes.proposedCount,
+              },
+            }).catch(() => {});
+
+            if (!json) {
+              console.log('  Review pack notification sent.');
+            }
+          }
+        } catch (error) {
+          results.steps.push({ name: 'review_pack', success: false, error: (error as Error).message });
+          if (!json) {
+            console.log(`  Warning: Review pack failed - ${(error as Error).message}`);
+          }
+        }
+        if (!json) {
+          console.log('');
+        }
+      }
+
       // Final summary
       results.success = true;
 
@@ -2972,6 +3056,152 @@ program
           console.log(`Health notification failed: ${(notifyError as Error).message}`);
         }
       }
+    }
+  });
+
+// ============================================================
+// Subcommand: review-pack
+// ============================================================
+program
+  .command('review-pack')
+  .description('Generate weekly review pack (consolidated Markdown report)')
+  .option('--since <date>', 'Start date (YYYY-MM-DD, default: 7 days ago)')
+  .option('--out <path>', 'Output file path (default: docs/reviews/review_YYYYMMDD.md)')
+  .option('--notify', 'Send notification')
+  .option('--json', 'Output summary as JSON')
+  .action(async (opts) => {
+    const json = opts.json || false;
+    const notify = opts.notify || false;
+
+    if (!json) {
+      console.log('Generating weekly review pack...');
+      console.log('');
+    }
+
+    try {
+      const builder = getReviewPackBuilder();
+      const pack = await builder.build({
+        since: opts.since,
+      });
+
+      // Determine output path
+      const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      const defaultOutputPath = path.join(process.cwd(), 'docs', 'reviews', `review_${today}.md`);
+      const outputPath = opts.out || defaultOutputPath;
+
+      // Ensure output directory exists
+      const outputDir = path.dirname(outputPath);
+      if (!require('fs').existsSync(outputDir)) {
+        require('fs').mkdirSync(outputDir, { recursive: true });
+      }
+
+      // Write markdown file
+      require('fs').writeFileSync(outputPath, pack.markdown, 'utf-8');
+
+      if (!json) {
+        console.log(`Review pack saved to: ${outputPath}`);
+        console.log('');
+
+        // Print summary
+        console.log('Summary:');
+        console.log(`  Period: ${pack.period.from} ~ ${pack.period.to}`);
+
+        const kpiParts: string[] = [];
+        kpiParts.push(`sent=${pack.kpi.sent}`);
+        kpiParts.push(`replies=${pack.kpi.replies}`);
+        if (pack.kpi.replyRate !== null) {
+          kpiParts.push(`rate=${(pack.kpi.replyRate * 100).toFixed(1)}%`);
+        }
+        if (pack.kpi.deadLetter > 0) {
+          kpiParts.push(`dead_letter=${pack.kpi.deadLetter}`);
+        }
+        console.log(`  KPI: ${kpiParts.join(', ')}`);
+        console.log(`  Actions: ${pack.actions.length}`);
+        console.log(`  Incidents (open): ${pack.incidents.openCount}`);
+        console.log(`  Fixes (proposed): ${pack.fixes.proposedCount}`);
+        console.log('');
+
+        // Print actions
+        if (pack.actions.length > 0) {
+          console.log('Top Actions:');
+          for (const action of pack.actions.slice(0, 3)) {
+            const badge = action.priority === 'high' ? '[HIGH]' : action.priority === 'medium' ? '[MED]' : '[LOW]';
+            console.log(`  ${badge} ${action.action}`);
+          }
+          console.log('');
+        }
+      }
+
+      // Send notification if requested
+      if (notify) {
+        try {
+          const kpiParts: string[] = [];
+          kpiParts.push(`sent=${pack.kpi.sent}`);
+          kpiParts.push(`replies=${pack.kpi.replies}`);
+          if (pack.kpi.replyRate !== null) {
+            kpiParts.push(`rate=${(pack.kpi.replyRate * 100).toFixed(1)}%`);
+          }
+          const kpiSummary = kpiParts.join(', ');
+
+          const severity = pack.actions.some(a => a.priority === 'high')
+            ? 'error'
+            : pack.actions.some(a => a.priority === 'medium')
+            ? 'warn'
+            : 'info';
+
+          await notifyOpsWeeklyReviewPack({
+            severity,
+            outputPath,
+            kpiSummary,
+            topActions: pack.actions.map(a => a.action),
+            meta: {
+              period: pack.period,
+              actionsCount: pack.actions.length,
+              openIncidents: pack.incidents.openCount,
+              proposedFixes: pack.fixes.proposedCount,
+            },
+          });
+
+          if (!json) {
+            console.log('Notification sent.');
+          }
+        } catch (notifyError) {
+          if (!json) {
+            console.log(`Notification failed: ${(notifyError as Error).message}`);
+          }
+        }
+      }
+
+      // Output JSON if requested
+      if (json) {
+        const jsonOutput = {
+          success: true,
+          generatedAt: pack.generatedAt,
+          period: pack.period,
+          outputPath,
+          kpi: pack.kpi,
+          experiments: pack.experiments,
+          incidents: {
+            openCount: pack.incidents.openCount,
+            mitigatedCount: pack.incidents.mitigatedCount,
+            closedCount: pack.incidents.closedCount,
+            topCategories: pack.incidents.topCategories,
+          },
+          fixes: {
+            proposedCount: pack.fixes.proposedCount,
+            acceptedCount: pack.fixes.acceptedCount,
+          },
+          actions: pack.actions,
+        };
+        console.log(JSON.stringify(jsonOutput, null, 2));
+      }
+    } catch (error) {
+      if (json) {
+        console.log(JSON.stringify({ success: false, error: (error as Error).message }, null, 2));
+      } else {
+        console.error('Error generating review pack:', (error as Error).message);
+      }
+      process.exit(1);
     }
   });
 

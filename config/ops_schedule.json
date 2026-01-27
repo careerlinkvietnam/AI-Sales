@@ -15,7 +15,9 @@
     "fixes_top": 3,
     "notify_incidents": true,
     "notify_fixes": true,
-    "comment": "compact_execute=false は最初は手動確認推奨。確認後trueに変更。"
+    "review_pack_enabled": false,
+    "review_pack_notify": false,
+    "comment": "compact_execute=false は最初は手動確認推奨。確認後trueに変更。review_pack_enabled=true でweekly終了時にレビューパック生成。"
   },
   "health": {
     "window_days": 3,

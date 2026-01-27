@@ -29,7 +29,8 @@ export type NotificationEventType =
   | 'SEND_QUEUE_REAPED'
   | 'OPS_DAILY_SUMMARY'
   | 'OPS_WEEKLY_SUMMARY'
-  | 'OPS_HEALTH_SUMMARY';
+  | 'OPS_HEALTH_SUMMARY'
+  | 'OPS_WEEKLY_REVIEW_PACK';
 
 /**
  * Notification severity levels

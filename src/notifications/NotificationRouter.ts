@@ -42,6 +42,7 @@ const DEFAULT_RATE_LIMIT_CONFIG: RateLimitConfig = {
     'OPS_DAILY_SUMMARY',
     'OPS_WEEKLY_SUMMARY',
     'OPS_HEALTH_SUMMARY',
+    'OPS_WEEKLY_REVIEW_PACK',
   ],
 };
 
@@ -579,6 +580,26 @@ export async function notifyOpsHealthSummary(params: {
     type: 'OPS_HEALTH_SUMMARY',
     severity: params.severity,
     reason: params.text,
+    meta: params.meta,
+  });
+}
+
+/**
+ * Notify ops weekly review pack
+ */
+export async function notifyOpsWeeklyReviewPack(params: {
+  severity: NotificationSeverity;
+  outputPath: string;
+  kpiSummary: string;
+  topActions: string[];
+  meta?: Record<string, unknown>;
+}): Promise<void> {
+  const actionList = params.topActions.slice(0, 3).map(a => `- ${a}`).join('\n');
+  const text = `Weekly Review Pack generated\n\nOutput: ${params.outputPath}\n\nKPI: ${params.kpiSummary}\n\nTop Actions:\n${actionList}`;
+  await getNotificationRouter().sendNotification({
+    type: 'OPS_WEEKLY_REVIEW_PACK',
+    severity: params.severity,
+    reason: text,
     meta: params.meta,
   });
 }

@@ -3185,6 +3185,57 @@ npx ts-node src/cli/run_ops.ts weekly --execute --since 2026-01-20 --json
 2. `fixes-propose` - 修正提案の生成
 3. `data compact` - データファイルのコンパクション
 4. `report` - 週次レポート生成
+5. `review-pack` - レビューパック生成（`review_pack_enabled=true`の場合のみ）
+
+#### レビューパック (review-pack)
+
+週次改善会用のレビューパック（Markdown）を生成するコマンドです。
+
+```bash
+# 基本使用（7日間のデータをまとめる）
+npx ts-node src/cli/run_ops.ts review-pack
+
+# 期間を指定
+npx ts-node src/cli/run_ops.ts review-pack --since 2026-01-20
+
+# 出力先を指定
+npx ts-node src/cli/run_ops.ts review-pack --out reports/weekly_review.md
+
+# 通知を送信
+npx ts-node src/cli/run_ops.ts review-pack --notify
+
+# JSON出力
+npx ts-node src/cli/run_ops.ts review-pack --json
+```
+
+**レポート内容**:
+1. **今週やること** - 自動生成されたアクションアイテム（優先度付き）
+2. **KPI Summary** - 送信数、返信数、返信率、ブロック率、キュー状態
+3. **Experiment Status** - 実験状態、アクティブ/提案中テンプレート数
+4. **Segment Insights** - 高パフォーマンス/低パフォーマンスセグメント（探索的分析）
+5. **Incidents** - オープン/軽減済み/クローズ済みインシデント、カテゴリ分布
+6. **Fix Proposals** - 提案/承認済み/実装済み修正提案
+7. **Data Files** - データファイルサイズ
+
+**アクションアイテム自動生成ルール**:
+| 条件 | 優先度 | アクション |
+|------|--------|------------|
+| dead_letter > 0 | high | デッドレターキューの確認・再試行/キャンセル |
+| open incidents > 0 | high | インシデントの調査・軽減/クローズ |
+| proposed templates > 0 | medium | 提案テンプレートのレビュー・承認/却下 |
+| proposed fixes > 0 | medium | 修正提案のレビュー・承認/却下 |
+| accepted fixes > 0 | medium | 承認済み修正の実装 |
+| reply rate < 5% | medium | テンプレート・ターゲティングの見直し |
+| blocked rate > 30% | low | 許可リスト・ランプ設定の見直し |
+
+**出力先**（デフォルト）:
+- `docs/reviews/review_YYYYMMDD.md`
+
+**スタンドアロンCLI**:
+```bash
+# generate_review_pack.ts も直接使用可能
+npx ts-node src/cli/generate_review_pack.ts --since 2026-01-20 --notify --json
+```
 
 #### ヘルスチェック (health)
 
@@ -3232,7 +3283,9 @@ npx ts-node src/cli/run_ops.ts health --json
     "fixes_top": 3,
     "notify_incidents": true,
     "notify_fixes": true,
-    "comment": "compact_execute=false は最初は手動確認推奨。確認後trueに変更。"
+    "review_pack_enabled": false,
+    "review_pack_notify": false,
+    "comment": "compact_execute=false は最初は手動確認推奨。review_pack_enabled=true でweekly終了時にレビューパック生成。"
   },
   "health": {
     "window_days": 3,
