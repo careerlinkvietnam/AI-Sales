@@ -41,10 +41,12 @@ import {
   notifyOpsWeeklySummary,
   notifyOpsHealthSummary,
   notifyOpsWeeklyReviewPack,
+  notifyOpsWeeklyApprovalsPick,
   NotificationEvent,
 } from '../notifications';
 import { getOpsSummaryBuilder, HealthInput, StepResult } from '../domain/OpsSummaryBuilder';
 import { getReviewPackBuilder, ReviewPack } from '../domain/ReviewPackBuilder';
+import { getApprovalCandidatePicker, ApprovalCandidates } from '../domain/ApprovalCandidatePicker';
 import { getIncidentManager, IncidentManager } from '../domain/IncidentManager';
 import { getResumeGate } from '../domain/ResumeGate';
 
@@ -2235,6 +2237,8 @@ export interface OpsScheduleConfig {
     notify_fixes: boolean;
     review_pack_enabled: boolean;
     review_pack_notify: boolean;
+    approvals_pick_enabled: boolean;
+    approvals_pick_notify: boolean;
   };
   health: {
     window_days: number;
@@ -2263,6 +2267,8 @@ export function loadOpsScheduleConfig(customConfigPath?: string): OpsScheduleCon
       notify_fixes: true,
       review_pack_enabled: false,
       review_pack_notify: false,
+      approvals_pick_enabled: false,
+      approvals_pick_notify: false,
     },
     health: {
       window_days: 3,
@@ -2742,6 +2748,78 @@ program
         }
       }
 
+      // Step 6: Approvals Pick (optional)
+      if (config.weekly.approvals_pick_enabled) {
+        if (!json) {
+          console.log('Step 6: Pick approval candidates...');
+        }
+        try {
+          const approvalsPicker = getApprovalCandidatePicker();
+          const approvalsResult = approvalsPicker.pick({
+            since,
+            maxTemplates: 3,
+            maxFixes: 3,
+            maxOps: 3,
+          });
+
+          results.steps.push({
+            name: 'approvals_pick',
+            success: true,
+            summary: approvalsResult.summary,
+          });
+
+          if (!json) {
+            console.log(`  Found ${approvalsResult.summary.totalCandidates} candidate(s): P0=${approvalsResult.summary.p0Count}, P1=${approvalsResult.summary.p1Count}, P2=${approvalsResult.summary.p2Count}`);
+          }
+
+          // Send notification if enabled
+          if (config.weekly.approvals_pick_notify && execute) {
+            const severity = approvalsResult.summary.p0Count > 0 ? 'error'
+              : approvalsResult.summary.p1Count > 0 ? 'warn'
+              : 'info';
+
+            const topTemplate = approvalsResult.templates[0];
+            const topFix = approvalsResult.fixes[0];
+            const topOps = approvalsResult.ops[0];
+
+            await notifyOpsWeeklyApprovalsPick({
+              severity,
+              summary: {
+                total: approvalsResult.summary.totalCandidates,
+                p0: approvalsResult.summary.p0Count,
+                p1: approvalsResult.summary.p1Count,
+                p2: approvalsResult.summary.p2Count,
+              },
+              topTemplate: topTemplate ? {
+                templateId: topTemplate.templateId,
+                priority: topTemplate.priority,
+              } : undefined,
+              topFix: topFix ? {
+                proposalId: topFix.proposalId,
+                priority: topFix.priority,
+              } : undefined,
+              topOps: topOps ? {
+                type: topOps.type,
+                priority: topOps.priority,
+              } : undefined,
+              recommendedCommand: topOps?.recommendedCommand || topFix?.recommendedCommand || topTemplate?.recommendedCommand,
+            }).catch(() => {});
+
+            if (!json) {
+              console.log('  Approvals pick notification sent.');
+            }
+          }
+        } catch (error) {
+          results.steps.push({ name: 'approvals_pick', success: false, error: (error as Error).message });
+          if (!json) {
+            console.log(`  Warning: Approvals pick failed - ${(error as Error).message}`);
+          }
+        }
+        if (!json) {
+          console.log('');
+        }
+      }
+
       // Final summary
       results.success = true;
 
@@ -3200,6 +3278,170 @@ program
         console.log(JSON.stringify({ success: false, error: (error as Error).message }, null, 2));
       } else {
         console.error('Error generating review pack:', (error as Error).message);
+      }
+      process.exit(1);
+    }
+  });
+
+// ============================================================
+// Subcommand: approvals-pick
+// ============================================================
+program
+  .command('approvals-pick')
+  .description('Pick approval candidates for weekly review (templates, fixes, ops)')
+  .option('--since <date>', 'Start date (YYYY-MM-DD, default: 7 days ago)')
+  .option('--max-templates <n>', 'Max template candidates (default: 3)', '3')
+  .option('--max-fixes <n>', 'Max fix proposal candidates (default: 3)', '3')
+  .option('--max-ops <n>', 'Max ops candidates (default: 3)', '3')
+  .option('--markdown', 'Output as Markdown')
+  .option('--json', 'Output as JSON')
+  .option('--notify', 'Send notification')
+  .action(async (opts) => {
+    const json = opts.json || false;
+    const markdown = opts.markdown || false;
+    const notify = opts.notify || false;
+    const maxTemplates = parseInt(opts.maxTemplates, 10);
+    const maxFixes = parseInt(opts.maxFixes, 10);
+    const maxOps = parseInt(opts.maxOps, 10);
+
+    try {
+      const picker = getApprovalCandidatePicker();
+      const result = picker.pick({
+        since: opts.since,
+        maxTemplates,
+        maxFixes,
+        maxOps,
+      });
+
+      // Output based on format
+      if (json) {
+        console.log(JSON.stringify(result, null, 2));
+      } else if (markdown) {
+        console.log(picker.generateMarkdown(result));
+      } else {
+        // Console output
+        console.log('='.repeat(70));
+        console.log('Approval Candidates');
+        console.log('='.repeat(70));
+        console.log('');
+        console.log(`Period: ${result.period.from} ~ ${result.period.to}`);
+        console.log(`Summary: ${result.summary.totalCandidates} candidate(s) - P0: ${result.summary.p0Count}, P1: ${result.summary.p1Count}, P2: ${result.summary.p2Count}`);
+        console.log('');
+
+        // Templates
+        console.log('-'.repeat(70));
+        console.log('1. Template Approval Candidates');
+        console.log('-'.repeat(70));
+        if (result.templates.length === 0) {
+          console.log('  No template approval candidates.');
+        } else {
+          for (const t of result.templates) {
+            console.log(`  [${t.priority}] ${t.templateId}`);
+            console.log(`      Experiment: ${t.experimentId}, Variant: ${t.variant}`);
+            console.log(`      Rationale: ${t.rationale}`);
+            if (t.guardrails.length > 0) {
+              console.log(`      Guardrails: ${t.guardrails.join(', ')}`);
+            }
+            console.log(`      Command: ${t.recommendedCommand}`);
+            console.log('');
+          }
+        }
+        console.log('');
+
+        // Fixes
+        console.log('-'.repeat(70));
+        console.log('2. Fix Proposal Candidates');
+        console.log('-'.repeat(70));
+        if (result.fixes.length === 0) {
+          console.log('  No fix proposal candidates.');
+        } else {
+          for (const f of result.fixes) {
+            console.log(`  [${f.priority}] ${f.proposalId}`);
+            console.log(`      Category: ${f.categoryId}`);
+            console.log(`      Rationale: ${f.rationale}`);
+            if (f.guardrails.length > 0) {
+              console.log(`      Guardrails: ${f.guardrails.join(', ')}`);
+            }
+            console.log(`      Command: ${f.recommendedCommand}`);
+            console.log('');
+          }
+        }
+        console.log('');
+
+        // Ops
+        console.log('-'.repeat(70));
+        console.log('3. Ops Candidates');
+        console.log('-'.repeat(70));
+        if (result.ops.length === 0) {
+          console.log('  No ops candidates.');
+        } else {
+          for (const o of result.ops) {
+            console.log(`  [${o.priority}] ${o.type}`);
+            console.log(`      Rationale: ${o.rationale}`);
+            if (o.guardrails.length > 0) {
+              console.log(`      Guardrails: ${o.guardrails.join(', ')}`);
+            }
+            console.log(`      Command: ${o.recommendedCommand}`);
+            console.log('');
+          }
+        }
+        console.log('');
+
+        console.log('='.repeat(70));
+        console.log('Note: This is a guide only. No automatic approvals are performed.');
+        console.log('='.repeat(70));
+      }
+
+      // Send notification if requested
+      if (notify) {
+        try {
+          const severity = result.summary.p0Count > 0 ? 'error'
+            : result.summary.p1Count > 0 ? 'warn'
+            : 'info';
+
+          const topTemplate = result.templates[0];
+          const topFix = result.fixes[0];
+          const topOps = result.ops[0];
+
+          await notifyOpsWeeklyApprovalsPick({
+            severity,
+            summary: {
+              total: result.summary.totalCandidates,
+              p0: result.summary.p0Count,
+              p1: result.summary.p1Count,
+              p2: result.summary.p2Count,
+            },
+            topTemplate: topTemplate ? {
+              templateId: topTemplate.templateId,
+              priority: topTemplate.priority,
+            } : undefined,
+            topFix: topFix ? {
+              proposalId: topFix.proposalId,
+              priority: topFix.priority,
+            } : undefined,
+            topOps: topOps ? {
+              type: topOps.type,
+              priority: topOps.priority,
+            } : undefined,
+            recommendedCommand: topOps?.recommendedCommand || topFix?.recommendedCommand || topTemplate?.recommendedCommand,
+          });
+
+          if (!json && !markdown) {
+            console.log('');
+            console.log('Notification sent.');
+          }
+        } catch (notifyError) {
+          if (!json && !markdown) {
+            console.log('');
+            console.log(`Notification failed: ${(notifyError as Error).message}`);
+          }
+        }
+      }
+    } catch (error) {
+      if (json) {
+        console.log(JSON.stringify({ success: false, error: (error as Error).message }, null, 2));
+      } else {
+        console.error('Error picking approvals:', (error as Error).message);
       }
       process.exit(1);
     }

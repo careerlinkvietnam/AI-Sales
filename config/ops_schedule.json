@@ -17,7 +17,9 @@
     "notify_fixes": true,
     "review_pack_enabled": false,
     "review_pack_notify": false,
-    "comment": "compact_execute=false は最初は手動確認推奨。確認後trueに変更。review_pack_enabled=true でweekly終了時にレビューパック生成。"
+    "approvals_pick_enabled": false,
+    "approvals_pick_notify": false,
+    "comment": "compact_execute=false は最初は手動確認推奨。review_pack_enabled/approvals_pick_enabled=true でweekly終了時に各レポート生成。"
   },
   "health": {
     "window_days": 3,

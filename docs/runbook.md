@@ -3186,6 +3186,7 @@ npx ts-node src/cli/run_ops.ts weekly --execute --since 2026-01-20 --json
 3. `data compact` - データファイルのコンパクション
 4. `report` - 週次レポート生成
 5. `review-pack` - レビューパック生成（`review_pack_enabled=true`の場合のみ）
+6. `approvals-pick` - 承認候補ピック（`approvals_pick_enabled=true`の場合のみ）
 
 #### レビューパック (review-pack)
 
@@ -3237,6 +3238,88 @@ npx ts-node src/cli/run_ops.ts review-pack --json
 npx ts-node src/cli/generate_review_pack.ts --since 2026-01-20 --notify --json
 ```
 
+#### 承認候補ピック (approvals-pick)
+
+週次改善会の意思決定を高速化するため、承認すべき対象を自動で絞り込むコマンドです。
+
+**重要**: 自動承認は行いません。候補を提示するのみで、最終判断は人間が行います。
+
+```bash
+# 基本使用（7日間のデータを分析）
+npx ts-node src/cli/run_ops.ts approvals-pick
+
+# 期間を指定
+npx ts-node src/cli/run_ops.ts approvals-pick --since 2026-01-20
+
+# Markdown出力
+npx ts-node src/cli/run_ops.ts approvals-pick --markdown
+
+# JSON出力
+npx ts-node src/cli/run_ops.ts approvals-pick --json
+
+# 通知を送信
+npx ts-node src/cli/run_ops.ts approvals-pick --notify
+
+# 候補数を制限
+npx ts-node src/cli/run_ops.ts approvals-pick --max-templates 5 --max-fixes 5 --max-ops 5
+```
+
+**候補カテゴリ**:
+1. **Template Approval Candidates** - 提案テンプレートの承認/却下候補
+2. **Fix Proposal Candidates** - 修正提案の承認/却下候補
+3. **Ops Candidates** - 運用対応候補（dead_letter、kill switch、インシデント等）
+
+**優先度（Priority）**:
+| 優先度 | Template条件 | Fix条件 | Ops条件 |
+|--------|--------------|---------|---------|
+| P0 | ブロック率高い/返信率著しく低い | auto_stop_triggered | dead_letter > 0 / kill switch + open incident |
+| P1 | 返信率やや低い | gmail_api / token_or_registry / experiment_health | queue backlog / incident review |
+| P2 | 微改善狙い | その他 | data cleanup |
+
+**出力内容**（各候補に含まれる情報）:
+- **id**: 候補ID
+- **priority**: P0/P1/P2
+- **rationale**: 選定理由（数値・状態・カテゴリ、PII無し）
+- **recommendedCommand**: 次に実行すべきコマンド
+- **guardrails**: 注意事項（min_sent未満、experiment paused等）
+
+**スタンドアロンCLI**:
+```bash
+# pick_approvals.ts も直接使用可能
+npx ts-node src/cli/pick_approvals.ts --since 2026-01-20 --notify --json
+```
+
+#### 週次会議の手順
+
+週次改善会で効率的に意思決定を行うための推奨手順です。
+
+**重要**: 自動承認は行いません。すべての承認/却下は人間が判断します。
+
+```bash
+# 1. レビューパック生成（全体状況の把握）
+npx ts-node src/cli/run_ops.ts review-pack
+
+# 2. 承認候補ピック（承認対象の絞り込み）
+npx ts-node src/cli/run_ops.ts approvals-pick
+
+# 3. 承認/却下（修正提案）
+npx ts-node src/cli/run_ops.ts fixes-accept <proposal_id> --actor "reviewer" --reason "..."
+npx ts-node src/cli/run_ops.ts fixes-reject <proposal_id> --actor "reviewer" --reason "..."
+
+# 4. テンプレート承認（必要に応じて）
+npx ts-node src/cli/run_ops.ts approve --experiment "..." --template-id "..." --approved-by "..." --reason "..."
+
+# 5. 勝者昇格（十分なデータがある場合）
+npx ts-node src/cli/run_ops.ts promote --experiment "..."
+```
+
+**会議アジェンダ例**:
+1. **状況確認**（5分）: review-packの確認、KPI・インシデント状況
+2. **承認候補レビュー**（10分）: approvals-pickの候補を優先度順に確認
+3. **意思決定**（10分）: 各候補の承認/却下/保留を決定
+4. **アクション実行**（5分）: 決定に基づきコマンド実行
+5. **次週の計画**（5分）: 次週の重点項目を確認
+
 #### ヘルスチェック (health)
 
 システム全体のヘルス状態を確認するコマンドです。
@@ -3285,7 +3368,9 @@ npx ts-node src/cli/run_ops.ts health --json
     "notify_fixes": true,
     "review_pack_enabled": false,
     "review_pack_notify": false,
-    "comment": "compact_execute=false は最初は手動確認推奨。review_pack_enabled=true でweekly終了時にレビューパック生成。"
+    "approvals_pick_enabled": false,
+    "approvals_pick_notify": false,
+    "comment": "review_pack_enabled/approvals_pick_enabled=true でweekly終了時に各レポート生成。"
   },
   "health": {
     "window_days": 3,

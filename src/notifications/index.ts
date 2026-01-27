@@ -49,4 +49,5 @@ export {
   notifyOpsWeeklySummary,
   notifyOpsHealthSummary,
   notifyOpsWeeklyReviewPack,
+  notifyOpsWeeklyApprovalsPick,
 } from './NotificationRouter';

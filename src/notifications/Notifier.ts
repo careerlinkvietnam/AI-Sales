@@ -30,7 +30,8 @@ export type NotificationEventType =
   | 'OPS_DAILY_SUMMARY'
   | 'OPS_WEEKLY_SUMMARY'
   | 'OPS_HEALTH_SUMMARY'
-  | 'OPS_WEEKLY_REVIEW_PACK';
+  | 'OPS_WEEKLY_REVIEW_PACK'
+  | 'OPS_WEEKLY_APPROVALS_PICK';
 
 /**
  * Notification severity levels

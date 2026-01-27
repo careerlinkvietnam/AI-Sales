@@ -43,6 +43,7 @@ const DEFAULT_RATE_LIMIT_CONFIG: RateLimitConfig = {
     'OPS_WEEKLY_SUMMARY',
     'OPS_HEALTH_SUMMARY',
     'OPS_WEEKLY_REVIEW_PACK',
+    'OPS_WEEKLY_APPROVALS_PICK',
   ],
 };
 
@@ -601,6 +602,65 @@ export async function notifyOpsWeeklyReviewPack(params: {
     severity: params.severity,
     reason: text,
     meta: params.meta,
+  });
+}
+
+/**
+ * Notify ops weekly approvals pick
+ */
+export async function notifyOpsWeeklyApprovalsPick(params: {
+  severity: NotificationSeverity;
+  summary: {
+    total: number;
+    p0: number;
+    p1: number;
+    p2: number;
+  };
+  topTemplate?: {
+    templateId: string;
+    priority: string;
+  };
+  topFix?: {
+    proposalId: string;
+    priority: string;
+  };
+  topOps?: {
+    type: string;
+    priority: string;
+  };
+  recommendedCommand?: string;
+}): Promise<void> {
+  const parts: string[] = [];
+  parts.push(`Approval Candidates: ${params.summary.total} total (P0: ${params.summary.p0}, P1: ${params.summary.p1}, P2: ${params.summary.p2})`);
+
+  if (params.topTemplate) {
+    parts.push(`Template: [${params.topTemplate.priority}] ${params.topTemplate.templateId}`);
+  }
+  if (params.topFix) {
+    parts.push(`Fix: [${params.topFix.priority}] ${params.topFix.proposalId}`);
+  }
+  if (params.topOps) {
+    parts.push(`Ops: [${params.topOps.priority}] ${params.topOps.type}`);
+  }
+  if (params.recommendedCommand) {
+    // Truncate command to avoid long notifications
+    const cmd = params.recommendedCommand.length > 80
+      ? params.recommendedCommand.substring(0, 77) + '...'
+      : params.recommendedCommand;
+    parts.push(`Next: ${cmd}`);
+  }
+
+  const text = parts.join('\n');
+  await getNotificationRouter().sendNotification({
+    type: 'OPS_WEEKLY_APPROVALS_PICK',
+    severity: params.severity,
+    reason: text,
+    meta: {
+      summary: params.summary,
+      topTemplate: params.topTemplate,
+      topFix: params.topFix,
+      topOps: params.topOps,
+    },
   });
 }
 
