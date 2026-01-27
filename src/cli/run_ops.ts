@@ -37,8 +37,12 @@ import {
   notifyFixProposalAccepted,
   notifyFixProposalRejected,
   notifyFixProposalImplemented,
+  notifyOpsDailySummary,
+  notifyOpsWeeklySummary,
+  notifyOpsHealthSummary,
   NotificationEvent,
 } from '../notifications';
+import { getOpsSummaryBuilder, HealthInput, StepResult } from '../domain/OpsSummaryBuilder';
 import { getIncidentManager, IncidentManager } from '../domain/IncidentManager';
 import { getResumeGate } from '../domain/ResumeGate';
 
@@ -2442,6 +2446,87 @@ program
 
       // Final summary
       results.success = true;
+
+      // Build and send summary notification
+      try {
+        const policy = getSendPolicy();
+        const { getSendQueueManager } = require('../domain/SendQueueManager');
+        const manager = getSendQueueManager();
+        const queueCounts = manager.getStatusCounts();
+        const incidentManager = getIncidentManager();
+        const openIncidents = incidentManager.listIncidents({ status: 'open' });
+        const autoStopMetrics = runAutoStopJob({ dryRun: true });
+
+        // Build health input for summary
+        const healthForSummary: HealthInput = {
+          killSwitch: {
+            runtimeEnabled: killSwitch.isEnabled(),
+            envEnabled: policy.getConfig().killSwitch,
+            reason: killSwitch.getState()?.reason || null,
+          },
+          sendQueue: {
+            queued: queueCounts.queued,
+            inProgress: queueCounts.in_progress,
+            deadLetter: queueCounts.dead_letter,
+            sent: queueCounts.sent,
+            failed: queueCounts.failed,
+          },
+          incidents: {
+            openCount: openIncidents.length,
+            openIds: openIncidents.map((i: { incident_id: string }) => i.incident_id),
+          },
+          metrics: {
+            windowDays: config.health.window_days,
+            totalSent: autoStopMetrics.metrics.totalSent,
+            totalReplies: autoStopMetrics.metrics.totalReplies,
+            replyRate: autoStopMetrics.metrics.replyRate,
+            totalBlocked: autoStopMetrics.metrics.totalBlocked,
+          },
+          data: {} as HealthInput['data'],
+        };
+
+        // Add data file status
+        for (const name of dataFiles) {
+          const status = getDataFileStatus(path.join(process.cwd(), 'data', `${name}.ndjson`));
+          healthForSummary.data[name] = {
+            exists: status.exists,
+            lines: status.lines,
+            sizeBytes: status.sizeBytes,
+            sizeFormatted: formatBytes(status.sizeBytes),
+          };
+        }
+
+        // Build summary
+        const summaryBuilder = getOpsSummaryBuilder();
+        const summary = summaryBuilder.build({
+          opType: 'daily',
+          mode: execute ? 'execute' : 'dry-run',
+          health: healthForSummary,
+          steps: results.steps as StepResult[],
+        });
+
+        results.summary = summary;
+
+        // Send notification (best effort)
+        if (config.daily.notify_report) {
+          const summaryText = summaryBuilder.formatAsText(summary);
+          await notifyOpsDailySummary({
+            severity: summary.severity,
+            text: summaryText,
+            meta: {
+              mode: summary.mode,
+              highlights: summary.highlights,
+              actions: summary.actions,
+            },
+          }).catch(() => {});
+        }
+      } catch (summaryError) {
+        // Best effort - don't fail main operation
+        if (!json) {
+          console.log(`  (Summary notification skipped: ${(summaryError as Error).message})`);
+        }
+      }
+
       if (json) {
         console.log(JSON.stringify(results, null, 2));
       } else {
@@ -2575,6 +2660,90 @@ program
 
       // Final summary
       results.success = true;
+
+      // Build and send summary notification
+      try {
+        const killSwitch = getRuntimeKillSwitch();
+        const policy = getSendPolicy();
+        const { getSendQueueManager } = require('../domain/SendQueueManager');
+        const manager = getSendQueueManager();
+        const queueCounts = manager.getStatusCounts();
+        const incidentManager = getIncidentManager();
+        const openIncidents = incidentManager.listIncidents({ status: 'open' });
+        const autoStopMetrics = runAutoStopJob({ dryRun: true });
+        const { getDataFileStatus, formatBytes } = require('../data/NdjsonCompactor');
+
+        // Build health input for summary
+        const healthForSummary: HealthInput = {
+          killSwitch: {
+            runtimeEnabled: killSwitch.isEnabled(),
+            envEnabled: policy.getConfig().killSwitch,
+            reason: killSwitch.getState()?.reason || null,
+          },
+          sendQueue: {
+            queued: queueCounts.queued,
+            inProgress: queueCounts.in_progress,
+            deadLetter: queueCounts.dead_letter,
+            sent: queueCounts.sent,
+            failed: queueCounts.failed,
+          },
+          incidents: {
+            openCount: openIncidents.length,
+            openIds: openIncidents.map((i: { incident_id: string }) => i.incident_id),
+          },
+          metrics: {
+            windowDays: config.health.window_days,
+            totalSent: autoStopMetrics.metrics.totalSent,
+            totalReplies: autoStopMetrics.metrics.totalReplies,
+            replyRate: autoStopMetrics.metrics.replyRate,
+            totalBlocked: autoStopMetrics.metrics.totalBlocked,
+          },
+          data: {} as HealthInput['data'],
+        };
+
+        // Add data file status
+        const dataFiles = ['send_queue', 'metrics', 'incidents'];
+        for (const name of dataFiles) {
+          const status = getDataFileStatus(path.join(process.cwd(), 'data', `${name}.ndjson`));
+          healthForSummary.data[name] = {
+            exists: status.exists,
+            lines: status.lines,
+            sizeBytes: status.sizeBytes,
+            sizeFormatted: formatBytes(status.sizeBytes),
+          };
+        }
+
+        // Build summary
+        const summaryBuilder = getOpsSummaryBuilder();
+        const summary = summaryBuilder.build({
+          opType: 'weekly',
+          mode: execute ? 'execute' : 'dry-run',
+          health: healthForSummary,
+          steps: results.steps as StepResult[],
+        });
+
+        results.summary = summary;
+
+        // Send notification (best effort)
+        if (config.weekly.notify_incidents || config.weekly.notify_fixes) {
+          const summaryText = summaryBuilder.formatAsText(summary);
+          await notifyOpsWeeklySummary({
+            severity: summary.severity,
+            text: summaryText,
+            meta: {
+              mode: summary.mode,
+              highlights: summary.highlights,
+              actions: summary.actions,
+            },
+          }).catch(() => {});
+        }
+      } catch (summaryError) {
+        // Best effort - don't fail main operation
+        if (!json) {
+          console.log(`  (Summary notification skipped: ${(summaryError as Error).message})`);
+        }
+      }
+
       if (json) {
         console.log(JSON.stringify(results, null, 2));
       } else {
@@ -2603,9 +2772,11 @@ program
   .command('health')
   .description('Show system health status (kill switch, queue, incidents, metrics, data)')
   .option('--json', 'Output as JSON')
+  .option('--notify', 'Send health summary notification')
   .action(async (opts) => {
     const config = loadOpsScheduleConfig();
     const json = opts.json || false;
+    const notify = opts.notify || false;
 
     const killSwitch = getRuntimeKillSwitch();
     const policy = getSendPolicy();
@@ -2737,6 +2908,69 @@ program
       console.log('Data Files:');
       for (const [name, status] of Object.entries(health.data)) {
         console.log(`  ${name}: ${(status as any).lines} lines, ${(status as any).sizeFormatted}`);
+      }
+    }
+
+    // Send notification if requested
+    if (notify) {
+      try {
+        // Convert health to HealthInput format
+        const healthInput: HealthInput = {
+          killSwitch: {
+            runtimeEnabled: health.killSwitch.runtimeEnabled,
+            envEnabled: health.killSwitch.envEnabled,
+            reason: health.killSwitch.reason,
+          },
+          sendQueue: {
+            queued: health.sendQueue.queued,
+            inProgress: health.sendQueue.inProgress,
+            deadLetter: health.sendQueue.deadLetter,
+            sent: health.sendQueue.sent,
+            failed: health.sendQueue.failed,
+          },
+          incidents: {
+            openCount: health.incidents.openCount,
+            openIds: health.incidents.openIds,
+          },
+          metrics: {
+            windowDays: health.metrics.windowDays,
+            totalSent: health.metrics.totalSent,
+            totalReplies: health.metrics.totalReplies,
+            replyRate: health.metrics.replyRate,
+            totalBlocked: health.metrics.totalBlocked,
+          },
+          data: health.data as HealthInput['data'],
+        };
+
+        // Build summary
+        const summaryBuilder = getOpsSummaryBuilder();
+        const summary = summaryBuilder.build({
+          opType: 'health',
+          mode: 'execute', // health check is always "execute"
+          health: healthInput,
+        });
+
+        // Send notification
+        const summaryText = summaryBuilder.formatAsText(summary);
+        await notifyOpsHealthSummary({
+          severity: summary.severity,
+          text: summaryText,
+          meta: {
+            overall: health.overall,
+            highlights: summary.highlights,
+            actions: summary.actions,
+          },
+        });
+
+        if (!json) {
+          console.log('');
+          console.log('Health summary notification sent.');
+        }
+      } catch (notifyError) {
+        if (!json) {
+          console.log('');
+          console.log(`Health notification failed: ${(notifyError as Error).message}`);
+        }
       }
     }
   });

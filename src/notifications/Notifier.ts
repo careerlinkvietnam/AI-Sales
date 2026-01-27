@@ -26,7 +26,10 @@ export type NotificationEventType =
   | 'FIX_PROPOSAL_IMPLEMENTED'
   | 'SEND_QUEUE_DEAD_LETTER'
   | 'SEND_QUEUE_BACKOFF'
-  | 'SEND_QUEUE_REAPED';
+  | 'SEND_QUEUE_REAPED'
+  | 'OPS_DAILY_SUMMARY'
+  | 'OPS_WEEKLY_SUMMARY'
+  | 'OPS_HEALTH_SUMMARY';
 
 /**
  * Notification severity levels

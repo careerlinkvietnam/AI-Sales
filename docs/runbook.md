@@ -3317,6 +3317,84 @@ systemctl list-timers --all | grep ai_sales
 5. **実行モード移行**: `ops_schedule.json` の `execute` 系を `true` に変更
 6. **継続監視**: `health` コマンドで定期的にヘルス状態を確認
 
+### 8.6 運用サマリ通知
+
+daily/weekly/health の実行結果を1通に集約した運用サマリ通知を送信します。
+
+#### 通知内容
+
+| 項目 | 説明 |
+|------|------|
+| Title | 操作タイプ + severity + mode（例: "AI-Sales Daily Summary [OK]"） |
+| Severity | `info` / `warn` / `error` |
+| Highlights | 主要な状態（最大6行）: Queue状況、Metrics、Incidents、Reaper結果など |
+| Actions | 推奨アクション（最大3行）: 問題がある場合のみ |
+
+#### Severity判定ルール
+
+| Severity | 条件 |
+|----------|------|
+| `error` | Kill Switch有効 / Auto-Stop実行 / dead_letter > 0 / openインシデント > 0 |
+| `warn` | queuedが多い / blocked率高い / reply_rate < 2% / reaper発火 / データ肥大化 / ステップ失敗 |
+| `info` | 上記以外（正常） |
+
+#### 通知フォーマット例
+
+```
+AI-Sales Daily Summary [WARN]
+────────────────────────────────────────
+• Queue: 5 queued, 2 in_progress, 3 dead_letter
+• Metrics (3d): 100 sent, 10 replies (10.0%)
+• Blocked: 15
+• Incidents: 2 open
+• Reaper: 3 stale found, 2 requeued, 1 dead_lettered
+
+Next actions:
+→ Review dead letter jobs: run_ops send-queue status
+→ Review open incidents: run_ops incidents --status open
+
+Time: 2026-01-27T06:00:00.000Z
+```
+
+#### 通知の読み方
+
+1. **まずActionsを確認**: 「Next actions」に表示されたコマンドを実行
+2. **Severityに注目**:
+   - `[ERROR]`: 即時対応が必要（Kill Switch確認、dead_letter調査）
+   - `[WARN]`: 注意が必要（ログ確認、原因調査）
+   - `[OK]`: 正常動作
+
+#### health --notify
+
+ヘルスチェック結果を通知として送信できます。
+
+```bash
+# ヘルスチェック + 通知送信
+npx ts-node src/cli/run_ops.ts health --notify
+
+# JSON出力 + 通知送信
+npx ts-node src/cli/run_ops.ts health --json --notify
+```
+
+#### 通知が来ない場合のチェック
+
+1. **環境変数**: `NOTIFY_WEBHOOK_URL` が設定されているか確認
+   ```bash
+   grep NOTIFY_WEBHOOK_URL .env
+   ```
+
+2. **通知テスト**: テスト通知を送信
+   ```bash
+   npx ts-node src/cli/run_ops.ts notify-test
+   ```
+
+3. **失敗ログ**: `data/notify_failures.ndjson` を確認
+   ```bash
+   tail -20 data/notify_failures.ndjson
+   ```
+
+4. **設定確認**: `ops_schedule.json` の `notify_report` が `true` か確認
+
 ---
 
 ## 9. 連絡先
@@ -3350,3 +3428,4 @@ systemctl list-timers --all | grep ai_sales
 | 2026-01-27 | P4-10: 送信キュー - SendQueueStore, RetryPolicy, SendQueueManager, process_send_queue CLI, send_draft enqueue デフォルト化, send-queue サブコマンド |
 | 2026-01-27 | P4-11: 詰まり防止・肥大化対策 - ReapStaleQueueJobs, NdjsonCompactor, in_progress_started_at, send-queue reap, data compact/status サブコマンド, SEND_QUEUE_REAPED 通知 |
 | 2026-01-27 | P4-12: 日次/週次自動運用 - run_ops daily/weekly/health プリセット, config/ops_schedule.json, generate_scheduler_templates CLI, cron/systemdテンプレート |
+| 2026-01-27 | P4-13: 運用サマリ通知 - OpsSummaryBuilder, OPS_DAILY_SUMMARY/WEEKLY_SUMMARY/HEALTH_SUMMARY イベント, health --notify, 集約通知 |

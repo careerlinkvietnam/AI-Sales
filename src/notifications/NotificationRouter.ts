@@ -39,6 +39,9 @@ const DEFAULT_RATE_LIMIT_CONFIG: RateLimitConfig = {
     'OPS_STOP_SEND',
     'OPS_RESUME_SEND',
     'OPS_ROLLBACK',
+    'OPS_DAILY_SUMMARY',
+    'OPS_WEEKLY_SUMMARY',
+    'OPS_HEALTH_SUMMARY',
   ],
 };
 
@@ -529,6 +532,54 @@ export async function notifySendQueueReaped(params: {
       dead_lettered: params.deadLettered,
       sample_job_ids: params.sampleJobIds,
     },
+  });
+}
+
+/**
+ * Notify ops daily summary
+ */
+export async function notifyOpsDailySummary(params: {
+  severity: NotificationSeverity;
+  text: string;
+  meta?: Record<string, unknown>;
+}): Promise<void> {
+  await getNotificationRouter().sendNotification({
+    type: 'OPS_DAILY_SUMMARY',
+    severity: params.severity,
+    reason: params.text,
+    meta: params.meta,
+  });
+}
+
+/**
+ * Notify ops weekly summary
+ */
+export async function notifyOpsWeeklySummary(params: {
+  severity: NotificationSeverity;
+  text: string;
+  meta?: Record<string, unknown>;
+}): Promise<void> {
+  await getNotificationRouter().sendNotification({
+    type: 'OPS_WEEKLY_SUMMARY',
+    severity: params.severity,
+    reason: params.text,
+    meta: params.meta,
+  });
+}
+
+/**
+ * Notify ops health summary
+ */
+export async function notifyOpsHealthSummary(params: {
+  severity: NotificationSeverity;
+  text: string;
+  meta?: Record<string, unknown>;
+}): Promise<void> {
+  await getNotificationRouter().sendNotification({
+    type: 'OPS_HEALTH_SUMMARY',
+    severity: params.severity,
+    reason: params.text,
+    meta: params.meta,
   });
 }
 

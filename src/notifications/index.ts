@@ -44,4 +44,8 @@ export {
   notifySendQueueDeadLetter,
   notifySendQueueBackoff,
   notifySendQueueReaped,
+  // Summary notifications
+  notifyOpsDailySummary,
+  notifyOpsWeeklySummary,
+  notifyOpsHealthSummary,
 } from './NotificationRouter';
