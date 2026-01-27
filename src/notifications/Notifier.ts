@@ -25,7 +25,8 @@ export type NotificationEventType =
   | 'FIX_PROPOSAL_REJECTED'
   | 'FIX_PROPOSAL_IMPLEMENTED'
   | 'SEND_QUEUE_DEAD_LETTER'
-  | 'SEND_QUEUE_BACKOFF';
+  | 'SEND_QUEUE_BACKOFF'
+  | 'SEND_QUEUE_REAPED';
 
 /**
  * Notification severity levels

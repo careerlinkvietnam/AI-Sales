@@ -1934,9 +1934,10 @@ program
 program
   .command('send-queue')
   .description('Manage send queue')
-  .argument('<action>', 'Action: status, process, dead-letter, retry')
+  .argument('<action>', 'Action: status, process, dead-letter, retry, reap')
   .argument('[job_id]', 'Job ID (for retry, dead-letter show)')
   .option('--max-jobs <n>', 'Maximum jobs to process', '10')
+  .option('--stale-minutes <n>', 'Stale threshold in minutes (for reap)')
   .option('--execute', 'Actually process/send (default is dry-run)')
   .option('--actor <actor>', 'Actor name (for retry)')
   .option('--reason <reason>', 'Reason (for retry)')
@@ -2109,9 +2110,98 @@ program
         break;
       }
 
+      case 'reap': {
+        const { reapStaleJobs } = require('../jobs/ReapStaleQueueJobs');
+        const staleMinutes = opts.staleMinutes ? parseInt(opts.staleMinutes, 10) : undefined;
+        const execute = opts.execute || false;
+
+        const reapResult = reapStaleJobs({
+          execute,
+          staleMinutes,
+          notify: execute,
+        });
+
+        if (json) {
+          console.log(JSON.stringify(reapResult, null, 2));
+        } else {
+          console.log('='.repeat(60));
+          console.log(`Stale Job Reaper (${reapResult.dryRun ? 'DRY RUN' : 'EXECUTE'})`);
+          console.log('='.repeat(60));
+          console.log('');
+          console.log(`Stale threshold: ${reapResult.staleMinutes} minutes`);
+          console.log(`Max attempts: ${reapResult.maxAttempts}`);
+          console.log('');
+          console.log(`Found: ${reapResult.staleJobsFound} stale job(s)`);
+          console.log(`  Requeued: ${reapResult.requeued}`);
+          console.log(`  Dead Lettered: ${reapResult.deadLettered}`);
+          console.log(`  Skipped: ${reapResult.skipped}`);
+          console.log('');
+
+          if (reapResult.jobs.length > 0) {
+            console.log('Jobs:');
+            for (const job of reapResult.jobs) {
+              const icon = job.action === 'requeued' ? '🔄' : job.action === 'dead_lettered' ? '💀' : '⏭️';
+              console.log(`  ${icon} ${job.job_id} - ${job.action} (attempts: ${job.attempts})`);
+              console.log(`     ${job.reason}`);
+            }
+            console.log('');
+          }
+
+          if (reapResult.dryRun && reapResult.staleJobsFound > 0) {
+            console.log('Use --execute to actually reap stale jobs.');
+          }
+        }
+        break;
+      }
+
       default:
         console.error(`Unknown action: ${action}`);
-        console.error('Valid actions: status, process, dead-letter, retry');
+        console.error('Valid actions: status, process, dead-letter, retry, reap');
+        process.exit(1);
+    }
+  });
+
+// ============================================================
+// Subcommand: data
+// ============================================================
+program
+  .command('data')
+  .description('Manage data files (compact, rotate, status)')
+  .argument('<action>', 'Action: status, compact')
+  .option('--target <target>', 'Target file: send_queue, metrics, incidents, all')
+  .option('--execute', 'Actually perform the operation (default is dry-run)')
+  .option('--json', 'Output as JSON')
+  .action(async (action: string, opts) => {
+    const json = opts.json || false;
+
+    switch (action) {
+      case 'status': {
+        const args: string[] = ['status'];
+        if (json) args.push('--json');
+
+        await execCli('compact_data', args);
+        break;
+      }
+
+      case 'compact': {
+        if (!opts.target) {
+          console.error('Error: --target is required for compact');
+          console.error('Valid targets: send_queue, metrics, incidents, fix_proposals, fix_proposal_events, approvals, all');
+          process.exit(1);
+        }
+
+        const args: string[] = [];
+        args.push('--target', opts.target);
+        if (opts.execute) args.push('--execute');
+        if (json) args.push('--json');
+
+        await execCli('compact_data', args);
+        break;
+      }
+
+      default:
+        console.error(`Unknown action: ${action}`);
+        console.error('Valid actions: status, compact');
         process.exit(1);
     }
   });

@@ -2848,6 +2848,158 @@ npx ts-node src/cli/run_ops.ts send-queue retry --job-id SND-xxx --actor "..." -
 3. **対処実行**: 原因解決後、`send-queue retry` で再キュー
 4. **キャンセル**: 対処不能な場合は手動でキャンセル
 
+### 7.29 詰まり対応（Stale Job Reaper）
+
+長時間 `in_progress` のまま停止しているジョブ（詰まり）を自動回収します。
+
+#### 背景
+
+ジョブが `in_progress` のまま残る原因:
+- プロセスがクラッシュした
+- ネットワークタイムアウト
+- システム再起動
+
+#### 設定（config/send_queue.json）
+
+```json
+{
+  "reaper": {
+    "stale_minutes": 30,
+    "max_attempts": 8,
+    "reap_action": "requeue"
+  }
+}
+```
+
+| 設定 | 説明 | デフォルト |
+|------|------|-----------|
+| `stale_minutes` | この時間を超えて `in_progress` のジョブを対象 | 30 |
+| `max_attempts` | これを超えたら `dead_letter` へ | 8 |
+| `reap_action` | `requeue` または `dead_letter` | requeue |
+
+#### CLI 実行
+
+```bash
+# ドライラン（対象件数・job_id一覧だけ表示）
+npx ts-node src/cli/run_ops.ts send-queue reap
+
+# カスタム閾値
+npx ts-node src/cli/run_ops.ts send-queue reap --stale-minutes 15
+
+# 実行
+npx ts-node src/cli/run_ops.ts send-queue reap --execute
+
+# JSON出力
+npx ts-node src/cli/run_ops.ts send-queue reap --execute --json
+```
+
+#### 動作
+
+1. `status=in_progress` かつ `in_progress_started_at` から `stale_minutes` を超えたジョブを検出
+2. `attempts` を +1（回収も1attempt扱い）
+3. `attempts > max_attempts` の場合は `dead_letter` へ
+4. それ以外は `queued` に戻し、バックオフを設定
+5. 1件以上回収した場合は通知（`SEND_QUEUE_REAPED`）
+
+#### 推奨cronジョブ
+
+```cron
+# 15分ごとにreaperを実行
+*/15 * * * * cd /path/to/AI-Sales && npx ts-node src/cli/run_ops.ts send-queue reap --execute >> /var/log/reaper.log 2>&1
+```
+
+### 7.30 データ肥大化対応（Compaction/Rotation）
+
+NDJSON ストアの肥大化を防ぐため、コンパクション（圧縮）とローテーションを行います。
+
+#### 対象ファイル
+
+| ファイル | 戦略 | 説明 |
+|----------|------|------|
+| `data/send_queue.ndjson` | compact | `job_id` の最新スナップショットのみ保持 |
+| `data/metrics.ndjson` | rotate | 日付付きでローテーション |
+| `data/incidents.ndjson` | rotate | 日付付きでローテーション |
+| `data/fix_proposals.ndjson` | rotate | 日付付きでローテーション |
+| `data/fix_proposal_events.ndjson` | rotate | 日付付きでローテーション |
+| `data/approvals.ndjson` | rotate | 日付付きでローテーション |
+
+#### 設定（config/retention.json）
+
+```json
+{
+  "send_queue": {
+    "compact": true,
+    "key": ["job_id"],
+    "comment": "Compact by job_id (latest snapshot only)"
+  },
+  "metrics": {
+    "rotate": true,
+    "keep_days": 90,
+    "comment": "Rotate metrics.ndjson by date"
+  }
+}
+```
+
+#### CLI 実行
+
+```bash
+# ステータス確認（全ファイルの行数/サイズ）
+npx ts-node src/cli/run_ops.ts data status
+
+# send_queue のコンパクション（ドライラン）
+npx ts-node src/cli/run_ops.ts data compact --target send_queue
+
+# send_queue のコンパクション（実行）
+npx ts-node src/cli/run_ops.ts data compact --target send_queue --execute
+
+# 全ファイル処理（ドライラン）
+npx ts-node src/cli/run_ops.ts data compact --target all
+
+# 全ファイル処理（実行）
+npx ts-node src/cli/run_ops.ts data compact --target all --execute
+
+# JSON出力
+npx ts-node src/cli/run_ops.ts data compact --target send_queue --execute --json
+```
+
+#### 動作
+
+1. **コンパクション（send_queue）**:
+   - `job_id` でグループ化
+   - 各 `job_id` の最新レコードのみ残す
+   - バックアップを `.bak-YYYYMMDDHHmmss` に作成
+
+2. **ローテーション（metrics等）**:
+   - 現在のファイルを `.YYYYMMDD` にリネーム
+   - 空のファイルを新規作成
+
+#### 推奨頻度
+
+| ファイル | 推奨頻度 | 理由 |
+|----------|----------|------|
+| send_queue | 週1回 | append-only で肥大化しやすい |
+| metrics | 月1回 | イベント数が多い |
+| incidents | 月1回〜 | 比較的少量 |
+
+#### 週次メンテナンス例
+
+```bash
+# 1. ステータス確認
+npx ts-node src/cli/run_ops.ts data status
+
+# 2. send_queue コンパクション
+npx ts-node src/cli/run_ops.ts data compact --target send_queue --execute
+
+# 3. 結果確認
+npx ts-node src/cli/run_ops.ts data status
+```
+
+#### バックアップ管理
+
+- コンパクション/ローテーション時に `.bak-*` または `.YYYYMMDD` ファイルが作成されます
+- 古いバックアップは手動で削除してください（将来的に `keep_days` で自動削除可能）
+- **破壊的削除は行いません**（安全第一）
+
 ---
 
 ## 8. 運用ルーチン
@@ -3017,3 +3169,4 @@ npx ts-node src/cli/run_ops.ts rollback \
 | 2026-01-26 | P4-4: 段階リリースと自動停止 - RampPolicy, AutoStopPolicy, AutoStopJob, ramp-status/auto-stop サブコマンド, ramp_limited ブロック理由追加 |
 | 2026-01-26 | P4-5: 運用イベント通知 - WebhookNotifier, NotificationRouter, notify-test サブコマンド, PII-free通知設計 |
 | 2026-01-27 | P4-10: 送信キュー - SendQueueStore, RetryPolicy, SendQueueManager, process_send_queue CLI, send_draft enqueue デフォルト化, send-queue サブコマンド |
+| 2026-01-27 | P4-11: 詰まり防止・肥大化対策 - ReapStaleQueueJobs, NdjsonCompactor, in_progress_started_at, send-queue reap, data compact/status サブコマンド, SEND_QUEUE_REAPED 通知 |

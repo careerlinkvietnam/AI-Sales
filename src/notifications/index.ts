@@ -43,4 +43,5 @@ export {
   notifyFixProposalImplemented,
   notifySendQueueDeadLetter,
   notifySendQueueBackoff,
+  notifySendQueueReaped,
 } from './NotificationRouter';

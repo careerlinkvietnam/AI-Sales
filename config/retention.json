@@ -1,0 +1,38 @@
+{
+  "send_queue": {
+    "compact": true,
+    "key": ["job_id"],
+    "keep_status": ["queued", "in_progress", "dead_letter", "failed", "sent", "cancelled"],
+    "comment": "Compact by job_id (latest snapshot only). All statuses retained for now."
+  },
+  "metrics": {
+    "rotate": true,
+    "keep_days": 90,
+    "compact": false,
+    "comment": "Rotate metrics.ndjson by date. Events are immutable, no compaction."
+  },
+  "incidents": {
+    "rotate": true,
+    "keep_days": 365,
+    "compact": false,
+    "comment": "Rotate incidents.ndjson yearly. Audit trail preserved."
+  },
+  "fix_proposals": {
+    "rotate": true,
+    "keep_days": 365,
+    "compact": false,
+    "comment": "Rotate fix_proposals.ndjson yearly."
+  },
+  "fix_proposal_events": {
+    "rotate": true,
+    "keep_days": 365,
+    "compact": false,
+    "comment": "Rotate fix_proposal_events.ndjson yearly."
+  },
+  "approvals": {
+    "rotate": true,
+    "keep_days": 365,
+    "compact": false,
+    "comment": "Rotate approvals.ndjson yearly."
+  }
+}

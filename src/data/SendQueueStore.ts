@@ -54,6 +54,7 @@ export interface SendJob {
   approval_fingerprint: string;
   attempts: number;
   next_attempt_at: string;
+  in_progress_started_at?: string; // When job was leased (for stale detection)
   last_error_code?: SendErrorCode;
   last_error_message_hash?: string;
   last_updated_at: string;
@@ -258,6 +259,38 @@ export class SendQueueStore {
       }
     }
     return null;
+  }
+
+  /**
+   * Find stale in_progress jobs (for reaper)
+   * Returns jobs that have been in_progress for longer than staleMinutes
+   */
+  findStaleJobs(staleMinutes: number, now: Date = new Date()): SendJob[] {
+    const staleThreshold = new Date(now.getTime() - staleMinutes * 60 * 1000);
+    const staleJobs: SendJob[] = [];
+
+    for (const job of this.jobs.values()) {
+      if (job.status === 'in_progress' && job.in_progress_started_at) {
+        const startedAt = new Date(job.in_progress_started_at);
+        if (startedAt < staleThreshold) {
+          staleJobs.push(job);
+        }
+      }
+    }
+
+    // Sort by in_progress_started_at ascending (oldest first)
+    staleJobs.sort((a, b) =>
+      (a.in_progress_started_at || '').localeCompare(b.in_progress_started_at || '')
+    );
+
+    return staleJobs;
+  }
+
+  /**
+   * Get all jobs (for compaction)
+   */
+  getAllJobs(): SendJob[] {
+    return Array.from(this.jobs.values());
   }
 
   /**

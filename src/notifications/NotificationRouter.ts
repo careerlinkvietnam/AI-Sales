@@ -511,4 +511,25 @@ export async function notifySendQueueBackoff(params: {
   });
 }
 
+/**
+ * Notify send queue reaped (stale jobs recovered)
+ */
+export async function notifySendQueueReaped(params: {
+  requeued: number;
+  deadLettered: number;
+  sampleJobIds: string[];
+}): Promise<void> {
+  const total = params.requeued + params.deadLettered;
+  await getNotificationRouter().sendNotification({
+    type: 'SEND_QUEUE_REAPED',
+    severity: 'warn',
+    reason: `Reaped ${total} stale job(s): ${params.requeued} requeued, ${params.deadLettered} dead_lettered`,
+    meta: {
+      requeued: params.requeued,
+      dead_lettered: params.deadLettered,
+      sample_job_ids: params.sampleJobIds,
+    },
+  });
+}
+
 export default NotificationRouter;

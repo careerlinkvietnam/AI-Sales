@@ -143,7 +143,7 @@ export class SendQueueManager {
 
   /**
    * Lease the next ready job for processing
-   * Changes status to in_progress
+   * Changes status to in_progress and sets in_progress_started_at
    */
   leaseNextJob(now: Date = new Date()): LeaseResult {
     const job = this.store.findNextReadyJob(now);
@@ -154,6 +154,7 @@ export class SendQueueManager {
     // Transition to in_progress
     job.status = 'in_progress';
     job.attempts++;
+    job.in_progress_started_at = now.toISOString();
     this.store.updateJob(job);
 
     return { success: true, job };
