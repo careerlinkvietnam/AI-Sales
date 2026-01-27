@@ -26,6 +26,7 @@ import { ExperimentEvaluator, ExperimentsRegistry } from '../domain/ExperimentEv
 import { getRuntimeKillSwitch } from '../domain/RuntimeKillSwitch';
 import { getMetricsStore } from '../data/MetricsStore';
 import { notifyOpsRollback } from '../notifications';
+import { getIncidentManager } from '../domain/IncidentManager';
 
 // Load environment variables
 config();
@@ -55,6 +56,7 @@ interface RollbackResult {
   stoppedSending: boolean;
   backupPath: string | null;
   error?: string;
+  incident_id?: string;
 }
 
 /**
@@ -151,6 +153,21 @@ function rollbackExperiment(options: {
     stoppedSending,
   });
 
+  // Create incident
+  const incidentManager = getIncidentManager();
+  const initialActions = ['experiment_paused'];
+  if (stoppedSending) {
+    initialActions.push('runtime_kill_switch_enabled');
+  }
+  const incident = incidentManager.createIncident({
+    trigger_type: 'OPS_ROLLBACK',
+    created_by: 'operator',
+    severity: 'error',
+    reason,
+    experiment_id: experimentId,
+    initial_actions: initialActions,
+  });
+
   // Send notification (best effort, never throws)
   notifyOpsRollback({
     experimentId,
@@ -168,6 +185,7 @@ function rollbackExperiment(options: {
     newStatus: 'paused',
     stoppedSending,
     backupPath,
+    incident_id: incident.incident_id,
   };
 }
 

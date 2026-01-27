@@ -1901,6 +1901,192 @@ Metrics: sent_3d=150, reply_3d=2, blocked_3d=10, reply_rate_3d=1.3%
 Time: 2026-01-26T10:00:00.000Z
 ```
 
+### 7.24 インシデント管理（P4-6）
+
+運用プレイブック（停止→記録→復旧判定→再開）をコード化し、事故対応を属人化させません。
+
+#### インシデントの自動作成
+
+以下のイベント発生時、自動的にインシデントが作成されます：
+
+| トリガー | 作成元 | 重要度 | 自動アクション |
+|----------|--------|--------|----------------|
+| `AUTO_STOP` | AutoStopJob | error | runtime_kill_switch_enabled |
+| `OPS_STOP_SEND` | stop-send | warn | runtime_kill_switch_enabled |
+| `OPS_ROLLBACK` | rollback | error | experiment_paused, runtime_kill_switch_enabled（--stop-send時） |
+
+#### インシデントの状態遷移
+
+```
+open → mitigated → closed
+ │
+ └── （既存のopen incidentがある場合）
+      新しいトリガーはnoteとして追記
+```
+
+#### インシデント操作コマンド
+
+```bash
+# インシデント一覧
+npx ts-node src/cli/run_ops.ts incident list
+
+# オープン中のみ表示
+npx ts-node src/cli/run_ops.ts incident list --status open
+
+# JSON出力
+npx ts-node src/cli/run_ops.ts incident list --json
+
+# インシデント詳細
+npx ts-node src/cli/run_ops.ts incident show <incident_id>
+
+# ノート追加（調査メモ等）
+npx ts-node src/cli/run_ops.ts incident note <incident_id> \
+  --message "原因調査中。APIレスポンス遅延が原因と推定" \
+  --actor "担当者名"
+
+# インシデントクローズ
+npx ts-node src/cli/run_ops.ts incident close <incident_id> \
+  --actor "担当者名" \
+  --reason "原因特定完了、設定修正済み"
+```
+
+#### resume-check サブコマンド
+
+送信再開前の安全性チェックを実行します。
+
+```bash
+# 再開安全性チェック
+npx ts-node src/cli/run_ops.ts resume-check
+
+# JSON出力
+npx ts-node src/cli/run_ops.ts resume-check --json
+```
+
+**出力例**:
+
+```
+============================================================
+Resume Safety Check
+============================================================
+
+Status: BLOCKED
+Blockers (must resolve):
+  - RuntimeKillSwitch is ON: Auto-stop triggered
+
+Warnings:
+  - Open incident exists: INC-20260127-001 (Reply rate too low)
+
+Check Results:
+  ✗ runtimeKillSwitch: blocked
+  ✓ envKillSwitch: ok
+  ✓ autoSendEnabled: ok
+  ✓ allowlistConfigured: ok
+  ✗ cooldownPeriod: blocked (Auto-stop within 24h)
+  ✓ replyRateRecovered: ok
+  ✗ noOpenIncident: warning
+```
+
+#### ResumeGate チェック項目
+
+| チェック | ブロッカー/警告 | 説明 |
+|----------|-----------------|------|
+| runtimeKillSwitch | blocker | RuntimeKillSwitchがON |
+| envKillSwitch | blocker | KILL_SWITCH=true |
+| autoSendEnabled | blocker | ENABLE_AUTO_SEND≠true |
+| allowlistConfigured | blocker | 許可リスト未設定 |
+| cooldownPeriod | blocker | 24時間以内のauto-stop |
+| replyRateRecovered | warning | reply_rateがまだ閾値未満 |
+| noOpenIncident | warning | openインシデントが存在 |
+
+#### resume-send の強化
+
+`resume-send` 実行時、自動的に ResumeGate チェックが実行されます。
+
+```bash
+# ブロッカーがあれば停止
+npx ts-node src/cli/run_ops.ts resume-send \
+  --reason "調査完了" \
+  --set-by "担当者名"
+
+# 強制実行（ブロッカーを無視、理由必須）
+npx ts-node src/cli/run_ops.ts resume-send \
+  --reason "調査完了" \
+  --set-by "担当者名" \
+  --force \
+  --force-reason "緊急対応のため経営判断で強制再開"
+```
+
+**重要**: `--force` 使用時は `--force-reason` が必須です。強制理由はインシデントのnoteに自動記録されます。
+
+#### インシデントライフサイクルの例
+
+```bash
+# 1. 自動停止発生 → インシデント自動作成
+# (AutoStopJobが INC-20260127-001 を作成)
+
+# 2. 状態確認
+npx ts-node src/cli/run_ops.ts stop-status
+npx ts-node src/cli/run_ops.ts incident show INC-20260127-001
+
+# 3. 調査メモを追加
+npx ts-node src/cli/run_ops.ts incident note INC-20260127-001 \
+  --message "送信先リストに無効なドメインが混入していた" \
+  --actor "taro"
+
+# 4. 再開安全性チェック
+npx ts-node src/cli/run_ops.ts resume-check
+
+# 5. 問題解決後、再開
+npx ts-node src/cli/run_ops.ts resume-send \
+  --reason "無効ドメイン除外完了" \
+  --set-by "taro"
+
+# 6. インシデントクローズ
+npx ts-node src/cli/run_ops.ts incident close INC-20260127-001 \
+  --actor "taro" \
+  --reason "原因特定・対策実施完了"
+```
+
+#### インシデントデータ形式
+
+インシデントは `data/incidents.ndjson` に保存されます（PIIを含まない）。
+
+```json
+{
+  "incident_id": "INC-20260127-abc123",
+  "created_at": "2026-01-27T10:00:00.000Z",
+  "created_by": "auto_stop",
+  "trigger_type": "AUTO_STOP",
+  "severity": "error",
+  "status": "open",
+  "reason": "Reply rate too low: 1.2%",
+  "snapshot": {
+    "window_days": 3,
+    "sent": 100,
+    "replies": 1,
+    "reply_rate": 0.01,
+    "blocked": 5,
+    "blocked_rate": 0.05,
+    "ramp_cap_today": 20,
+    "kill_switch_state": { "env": false, "runtime": true },
+    "active_templates": ["tpl-1"]
+  },
+  "actions_taken": [
+    { "timestamp": "2026-01-27T10:00:00.000Z", "action": "runtime_kill_switch_enabled", "actor": "auto_stop" }
+  ],
+  "notes": [],
+  "updated_at": "2026-01-27T10:00:00.000Z"
+}
+```
+
+**スナップショット内容**:
+- `window_days`: 集計期間
+- `sent`, `replies`, `blocked`: イベント数
+- `reply_rate`, `blocked_rate`: レート
+- `ramp_cap_today`: 当日の段階リリース上限
+- `kill_switch_state`: 停止スイッチ状態
+- `active_templates`: アクティブなテンプレートID
+
 ### 7.17 推奨送信ワークフロー
 
 下書き作成から送信までの推奨フローです。

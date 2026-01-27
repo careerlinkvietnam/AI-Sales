@@ -36,6 +36,8 @@ import {
   notifyOpsRollback,
   NotificationEvent,
 } from '../notifications';
+import { getIncidentManager, IncidentManager } from '../domain/IncidentManager';
+import { getResumeGate } from '../domain/ResumeGate';
 
 // Load environment variables
 config();
@@ -630,6 +632,7 @@ program
   .action(async (opts) => {
     const killSwitch = getRuntimeKillSwitch();
     const metrics = getMetricsStore();
+    const incidentManager = getIncidentManager();
     const json = opts.json || false;
 
     // Enable kill switch
@@ -639,6 +642,15 @@ program
     metrics.recordOpsStopSend({
       reason: opts.reason,
       setBy: opts.setBy,
+    });
+
+    // Create incident
+    const incident = incidentManager.createIncident({
+      trigger_type: 'OPS_STOP_SEND',
+      created_by: 'operator',
+      severity: 'warn',
+      reason: opts.reason,
+      initial_actions: ['runtime_kill_switch_enabled'],
     });
 
     // Send notification (best effort)
@@ -658,6 +670,7 @@ program
         setBy: opts.setBy,
         setAt: state?.set_at,
         filePath: killSwitch.getFilePath(),
+        incident_id: incident.incident_id,
       }, null, 2));
     } else {
       console.log('='.repeat(60));
@@ -671,8 +684,13 @@ program
       console.log(`Set at: ${state?.set_at}`);
       console.log(`File: ${killSwitch.getFilePath()}`);
       console.log('');
-      console.log('To resume sending, run:');
-      console.log('  npx ts-node src/cli/run_ops.ts resume-send --reason "..." --set-by "..."');
+      console.log(`Incident created: ${incident.incident_id}`);
+      console.log('');
+      console.log('Next steps:');
+      console.log('  1. Investigate the issue');
+      console.log('  2. Add notes: run_ops incident note --id <id> --actor "..." --note "..."');
+      console.log('  3. Check resume readiness: run_ops resume-check');
+      console.log('  4. Resume sending: run_ops resume-send --reason "..." --set-by "..."');
     }
   });
 
@@ -681,14 +699,67 @@ program
 // ============================================================
 program
   .command('resume-send')
-  .description('Resume sending: Disable RuntimeKillSwitch')
+  .description('Resume sending: Disable RuntimeKillSwitch (checks ResumeGate first)')
   .requiredOption('--reason <reason>', 'Reason for resuming (e.g., "issue resolved", "false alarm")')
   .requiredOption('--set-by <name>', 'Name/ID of operator')
+  .option('--force', 'Force resume even with blockers (requires reason in incident note)')
   .option('--json', 'Output as JSON')
   .action(async (opts) => {
     const killSwitch = getRuntimeKillSwitch();
     const metrics = getMetricsStore();
+    const incidentManager = getIncidentManager();
+    const resumeGate = getResumeGate();
     const json = opts.json || false;
+
+    // Check ResumeGate first
+    const gateResult = resumeGate.evaluate();
+
+    // If blockers exist and not forcing, abort
+    if (!gateResult.ok && !opts.force) {
+      if (json) {
+        console.log(JSON.stringify({
+          success: false,
+          action: 'resume-send',
+          blocked: true,
+          blockers: gateResult.blockers,
+          warnings: gateResult.warnings,
+          hint: 'Use --force to override (requires justification)',
+        }, null, 2));
+      } else {
+        console.log('='.repeat(60));
+        console.log('RESUME BLOCKED');
+        console.log('='.repeat(60));
+        console.log('');
+        console.log('Cannot resume sending. The following blockers must be resolved:');
+        console.log('');
+        for (const blocker of gateResult.blockers) {
+          console.log(`  - ${blocker}`);
+        }
+        if (gateResult.warnings.length > 0) {
+          console.log('');
+          console.log('Warnings:');
+          for (const warning of gateResult.warnings) {
+            console.log(`  - ${warning}`);
+          }
+        }
+        console.log('');
+        console.log('To check current status: run_ops resume-check');
+        console.log('To force resume (not recommended): add --force');
+      }
+      process.exit(1);
+    }
+
+    // If forcing, add note to open incident
+    if (opts.force && !gateResult.ok) {
+      const openIncident = incidentManager.findOpenIncident();
+      if (openIncident) {
+        incidentManager.addNote(
+          openIncident.incident_id,
+          `FORCED RESUME: ${opts.reason} (blockers overridden: ${gateResult.blockers.join(', ')})`,
+          opts.setBy
+        );
+      }
+    }
 
     const previousState = killSwitch.getState();
 
@@ -700,6 +771,17 @@ program
       reason: opts.reason,
       setBy: opts.setBy,
     });
+
+    // Update open incident status to mitigated
+    const openIncident = incidentManager.findOpenIncident();
+    if (openIncident) {
+      incidentManager.updateStatus(openIncident.incident_id, 'mitigated', opts.setBy);
+      incidentManager.addNote(
+        openIncident.incident_id,
+        `Sending resumed: ${opts.reason}`,
+        opts.setBy
+      );
+    }
 
     // Send notification (best effort)
     notifyOpsResumeSend({
@@ -715,29 +797,40 @@ program
         action: 'resume-send',
         killSwitchEnabled: false,
         previousEnabled: previousState?.enabled ?? false,
+        forced: opts.force && !gateResult.ok,
         reason: opts.reason,
         setBy: opts.setBy,
         setAt: newState?.set_at,
         filePath: killSwitch.getFilePath(),
+        warnings: gateResult.warnings,
       }, null, 2));
     } else {
       console.log('='.repeat(60));
       console.log('SENDING RESUMED');
       console.log('='.repeat(60));
       console.log('');
+      if (opts.force && !gateResult.ok) {
+        console.log('WARNING: Resume was FORCED despite blockers.');
+        console.log('');
+      }
       console.log('Sending has been enabled (RuntimeKillSwitch disabled).');
       console.log('');
       console.log(`Reason: ${opts.reason}`);
       console.log(`Set by: ${opts.setBy}`);
       console.log(`Set at: ${newState?.set_at}`);
+      if (gateResult.warnings.length > 0) {
+        console.log('');
+        console.log('Warnings:');
+        for (const warning of gateResult.warnings) {
+          console.log(`  - ${warning}`);
+        }
+      }
+      if (openIncident) {
+        console.log('');
+        console.log(`Incident ${openIncident.incident_id} status updated to: mitigated`);
+        console.log('To close the incident: run_ops incident close --id <id> --actor "..." --reason "..."');
+      }
       console.log('');
-      console.log('Note: Sending will only work if:');
-      console.log('  - ENABLE_AUTO_SEND=true');
-      console.log('  - KILL_SWITCH=false (or not set)');
-      console.log('  - Recipient is in allowlist');
-      console.log('');
-      console.log('Check status:');
-      console.log('  npx ts-node src/cli/run_ops.ts stop-status');
     }
   });
 
@@ -1067,6 +1160,283 @@ program
         console.error(`  ${errorMsg}`);
       }
       process.exit(1);
+    }
+  });
+
+// ============================================================
+// Subcommand: incident list
+// ============================================================
+program
+  .command('incident')
+  .description('Manage incidents')
+  .argument('<action>', 'Action: list, show, note, close')
+  .option('--id <id>', 'Incident ID (required for show, note, close)')
+  .option('--status <status>', 'Filter by status (open, mitigated, closed) for list')
+  .option('--actor <actor>', 'Actor name (required for note, close)')
+  .option('--note <note>', 'Note text (required for note action)')
+  .option('--reason <reason>', 'Close reason (required for close action)')
+  .option('--json', 'Output as JSON')
+  .action(async (action: string, opts) => {
+    const incidentManager = getIncidentManager();
+    const json = opts.json || false;
+
+    switch (action) {
+      case 'list': {
+        const statusFilter = opts.status as 'open' | 'mitigated' | 'closed' | undefined;
+        const incidents = incidentManager.listIncidents(
+          statusFilter ? { status: statusFilter } : undefined
+        );
+
+        if (json) {
+          console.log(JSON.stringify({
+            success: true,
+            count: incidents.length,
+            filter: statusFilter || 'all',
+            incidents: incidents.map((i) => ({
+              incident_id: i.incident_id,
+              status: i.status,
+              trigger_type: i.trigger_type,
+              severity: i.severity,
+              reason: i.reason,
+              created_at: i.created_at,
+              created_by: i.created_by,
+              experiment_id: i.experiment_id,
+            })),
+          }, null, 2));
+        } else {
+          console.log('='.repeat(60));
+          console.log(`Incidents${statusFilter ? ` (status: ${statusFilter})` : ''}`);
+          console.log('='.repeat(60));
+          console.log('');
+          if (incidents.length === 0) {
+            console.log('No incidents found.');
+          } else {
+            for (const incident of incidents) {
+              console.log(`[${incident.status.toUpperCase()}] ${incident.incident_id}`);
+              console.log(`  Trigger: ${incident.trigger_type}`);
+              console.log(`  Severity: ${incident.severity}`);
+              console.log(`  Reason: ${incident.reason}`);
+              console.log(`  Created: ${incident.created_at} by ${incident.created_by}`);
+              if (incident.experiment_id) {
+                console.log(`  Experiment: ${incident.experiment_id}`);
+              }
+              console.log('');
+            }
+          }
+        }
+        break;
+      }
+
+      case 'show': {
+        if (!opts.id) {
+          console.error('Error: --id is required for show action');
+          process.exit(1);
+        }
+
+        const incident = incidentManager.getIncident(opts.id);
+        if (!incident) {
+          if (json) {
+            console.log(JSON.stringify({ success: false, error: 'Incident not found' }, null, 2));
+          } else {
+            console.error(`Incident not found: ${opts.id}`);
+          }
+          process.exit(1);
+        }
+
+        if (json) {
+          console.log(JSON.stringify({ success: true, incident }, null, 2));
+        } else {
+          console.log('='.repeat(60));
+          console.log(`Incident: ${incident.incident_id}`);
+          console.log('='.repeat(60));
+          console.log('');
+          console.log(`Status: ${incident.status.toUpperCase()}`);
+          console.log(`Trigger: ${incident.trigger_type}`);
+          console.log(`Severity: ${incident.severity}`);
+          console.log(`Reason: ${incident.reason}`);
+          console.log(`Created: ${incident.created_at} by ${incident.created_by}`);
+          console.log(`Updated: ${incident.updated_at}`);
+          if (incident.experiment_id) {
+            console.log(`Experiment: ${incident.experiment_id}`);
+          }
+          if (incident.closed_at) {
+            console.log(`Closed: ${incident.closed_at} by ${incident.closed_by}`);
+            console.log(`Close reason: ${incident.close_reason}`);
+          }
+          console.log('');
+          console.log('Snapshot:');
+          console.log(`  Window: ${incident.snapshot.window_days} days`);
+          console.log(`  Sent: ${incident.snapshot.sent}`);
+          console.log(`  Replies: ${incident.snapshot.replies}`);
+          console.log(`  Reply rate: ${incident.snapshot.reply_rate !== null ? (incident.snapshot.reply_rate * 100).toFixed(1) + '%' : 'N/A'}`);
+          console.log(`  Blocked: ${incident.snapshot.blocked}`);
+          console.log(`  Kill switch (env): ${incident.snapshot.kill_switch_state.env}`);
+          console.log(`  Kill switch (runtime): ${incident.snapshot.kill_switch_state.runtime}`);
+          console.log(`  Active templates: ${incident.snapshot.active_templates.join(', ') || 'none'}`);
+          console.log('');
+          if (incident.actions_taken.length > 0) {
+            console.log('Actions taken:');
+            for (const action of incident.actions_taken) {
+              console.log(`  - [${action.timestamp}] ${action.action} (${action.actor})`);
+            }
+            console.log('');
+          }
+          if (incident.notes.length > 0) {
+            console.log('Notes:');
+            for (const note of incident.notes) {
+              console.log(`  - [${note.timestamp}] ${note.note} (${note.actor})`);
+            }
+            console.log('');
+          }
+        }
+        break;
+      }
+
+      case 'note': {
+        if (!opts.id) {
+          console.error('Error: --id is required for note action');
+          process.exit(1);
+        }
+        if (!opts.actor) {
+          console.error('Error: --actor is required for note action');
+          process.exit(1);
+        }
+        if (!opts.note) {
+          console.error('Error: --note is required for note action');
+          process.exit(1);
+        }
+
+        const success = incidentManager.addNote(opts.id, opts.note, opts.actor);
+        if (!success) {
+          if (json) {
+            console.log(JSON.stringify({ success: false, error: 'Incident not found' }, null, 2));
+          } else {
+            console.error(`Incident not found: ${opts.id}`);
+          }
+          process.exit(1);
+        }
+
+        if (json) {
+          console.log(JSON.stringify({
+            success: true,
+            action: 'note_added',
+            incident_id: opts.id,
+            note: opts.note,
+            actor: opts.actor,
+          }, null, 2));
+        } else {
+          console.log(`Note added to incident ${opts.id}`);
+        }
+        break;
+      }
+
+      case 'close': {
+        if (!opts.id) {
+          console.error('Error: --id is required for close action');
+          process.exit(1);
+        }
+        if (!opts.actor) {
+          console.error('Error: --actor is required for close action');
+          process.exit(1);
+        }
+        if (!opts.reason) {
+          console.error('Error: --reason is required for close action');
+          process.exit(1);
+        }
+
+        const success = incidentManager.closeIncident(opts.id, opts.actor, opts.reason);
+        if (!success) {
+          if (json) {
+            console.log(JSON.stringify({ success: false, error: 'Incident not found' }, null, 2));
+          } else {
+            console.error(`Incident not found: ${opts.id}`);
+          }
+          process.exit(1);
+        }
+
+        if (json) {
+          console.log(JSON.stringify({
+            success: true,
+            action: 'incident_closed',
+            incident_id: opts.id,
+            reason: opts.reason,
+            actor: opts.actor,
+          }, null, 2));
+        } else {
+          console.log(`Incident ${opts.id} closed.`);
+          console.log(`  Reason: ${opts.reason}`);
+          console.log(`  Closed by: ${opts.actor}`);
+        }
+        break;
+      }
+
+      default:
+        console.error(`Unknown action: ${action}`);
+        console.error('Valid actions: list, show, note, close');
+        process.exit(1);
+    }
+  });
+
+// ============================================================
+// Subcommand: resume-check
+// ============================================================
+program
+  .command('resume-check')
+  .description('Check if it is safe to resume sending (evaluate ResumeGate)')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    const resumeGate = getResumeGate();
+    const json = opts.json || false;
+
+    const result = resumeGate.evaluate();
+
+    if (json) {
+      console.log(JSON.stringify({
+        success: true,
+        ok: result.ok,
+        blockers: result.blockers,
+        warnings: result.warnings,
+        checkResults: result.checkResults,
+      }, null, 2));
+    } else {
+      console.log('='.repeat(60));
+      console.log('Resume Gate Check');
+      console.log('='.repeat(60));
+      console.log('');
+      console.log(`Status: ${result.ok ? 'OK - Can resume' : 'BLOCKED - Cannot resume'}`);
+      console.log('');
+
+      if (result.blockers.length > 0) {
+        console.log('Blockers (must resolve before resuming):');
+        for (const blocker of result.blockers) {
+          console.log(`  - ${blocker}`);
+        }
+        console.log('');
+      }
+
+      if (result.warnings.length > 0) {
+        console.log('Warnings (may proceed with caution):');
+        for (const warning of result.warnings) {
+          console.log(`  - ${warning}`);
+        }
+        console.log('');
+      }
+
+      console.log('Check details:');
+      const checks = result.checkResults;
+      console.log(`  Runtime kill switch: ${checks.runtimeKillSwitch.blocked ? 'BLOCKED' : 'OK'}`);
+      console.log(`  Env kill switch: ${checks.envKillSwitch.blocked ? 'BLOCKED' : 'OK'}`);
+      console.log(`  Auto-send enabled: ${checks.autoSendEnabled.blocked ? 'BLOCKED' : 'OK'}`);
+      console.log(`  Allowlist configured: ${checks.allowlistConfigured.blocked ? 'BLOCKED' : 'OK'}`);
+      console.log(`  Cooldown period: ${checks.cooldownPeriod.blocked ? 'BLOCKED' : 'OK'}`);
+      console.log(`  Reply rate recovered: ${checks.replyRateRecovered.blocked ? 'WARNING' : 'OK'}`);
+      console.log(`  No open incident: ${checks.noOpenIncident.blocked ? 'WARNING' : 'OK'}`);
+      console.log('');
+
+      if (!result.ok) {
+        console.log('To resume anyway (not recommended):');
+        console.log('  run_ops resume-send --reason "..." --set-by "..." --force');
+      }
     }
   });
 

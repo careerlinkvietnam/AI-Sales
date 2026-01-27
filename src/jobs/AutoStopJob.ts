@@ -18,6 +18,7 @@ import { getMetricsStore, MetricsEvent } from '../data/MetricsStore';
 import { getAutoStopPolicy, AutoStopMetrics, DailyMetrics } from '../domain/AutoStopPolicy';
 import { getRuntimeKillSwitch } from '../domain/RuntimeKillSwitch';
 import { notifyAutoStopExecuted } from '../notifications';
+import { getIncidentManager } from '../domain/IncidentManager';
 
 /**
  * Auto-stop job result
@@ -37,6 +38,7 @@ export interface AutoStopJobResult {
     consecutiveBadDays: number;
   };
   windowDays: number;
+  incident_id?: string;
 }
 
 /**
@@ -99,6 +101,8 @@ export function runAutoStopJob(options: AutoStopJobOptions = {}): AutoStopJobRes
 
   // If should stop and not dry run, activate kill switch
   let stopped = false;
+  let incidentId: string | undefined;
+
   if (evaluation.should_stop && !dryRun) {
     runtimeKillSwitch.setEnabled(
       `Auto-stop: ${evaluation.reasons.join('; ')}`,
@@ -110,6 +114,17 @@ export function runAutoStopJob(options: AutoStopJobOptions = {}): AutoStopJobRes
       reason: `Auto-stop triggered: ${evaluation.reasons.join('; ')}`,
       setBy: 'auto_stop',
     });
+
+    // Create incident
+    const incidentManager = getIncidentManager();
+    const incident = incidentManager.createIncident({
+      trigger_type: 'AUTO_STOP',
+      created_by: 'auto_stop',
+      severity: 'error',
+      reason: evaluation.reasons.join('; '),
+      initial_actions: ['runtime_kill_switch_enabled'],
+    });
+    incidentId = incident.incident_id;
 
     // Send notification (best effort, never throws)
     notifyAutoStopExecuted({
@@ -135,6 +150,7 @@ export function runAutoStopJob(options: AutoStopJobOptions = {}): AutoStopJobRes
     reasons: evaluation.reasons,
     metrics: evaluation.metrics,
     windowDays: config.window_days,
+    incident_id: incidentId,
   };
 }
 
