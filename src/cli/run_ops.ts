@@ -1469,6 +1469,182 @@ program
     await execCli('report_incidents', args);
   });
 
+// ============================================================
+// Subcommand: fixes-propose
+// ============================================================
+program
+  .command('fixes-propose')
+  .description('Generate fix proposals based on incident analysis')
+  .option('--since <date>', 'Start date (YYYY-MM-DD), default: 7 days ago')
+  .option('--top <n>', 'Top N categories to generate proposals for', '3')
+  .option('--dry-run', 'Generate proposals without saving')
+  .option('--notify', 'Send notification with proposal summary')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    const args: string[] = [];
+
+    if (opts.since) {
+      args.push('--since', opts.since);
+    }
+    if (opts.top) {
+      args.push('--top', opts.top);
+    }
+    if (opts.dryRun) {
+      args.push('--dry-run');
+    }
+    if (opts.notify) {
+      args.push('--notify');
+    }
+    if (opts.json) {
+      args.push('--json');
+    }
+
+    await execCli('propose_fixes', args);
+  });
+
+// ============================================================
+// Subcommand: fixes-list
+// ============================================================
+program
+  .command('fixes-list')
+  .description('List fix proposals')
+  .option('--status <status>', 'Filter by status (proposed, accepted, rejected, implemented)')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    const { getFixProposalStore } = require('../data/FixProposalStore');
+    const store = getFixProposalStore();
+    const json = opts.json || false;
+    const statusFilter = opts.status as 'proposed' | 'accepted' | 'rejected' | 'implemented' | undefined;
+
+    const proposals = store.listProposals(statusFilter ? { status: statusFilter } : undefined);
+
+    if (json) {
+      console.log(JSON.stringify({
+        success: true,
+        count: proposals.length,
+        filter: statusFilter || 'all',
+        proposals: proposals.map((p: any) => ({
+          proposal_id: p.proposal_id,
+          status: p.status,
+          priority: p.priority,
+          category_id: p.category_id,
+          title: p.title,
+          created_at: p.created_at,
+          incident_count: p.rationale.incident_count,
+        })),
+      }, null, 2));
+    } else {
+      console.log('='.repeat(60));
+      console.log(`Fix Proposals${statusFilter ? ` (status: ${statusFilter})` : ''}`);
+      console.log('='.repeat(60));
+      console.log('');
+
+      if (proposals.length === 0) {
+        console.log('No proposals found.');
+      } else {
+        for (const proposal of proposals) {
+          const statusIcon = {
+            proposed: '📋',
+            accepted: '✅',
+            rejected: '❌',
+            implemented: '✨',
+          }[proposal.status] || '?';
+
+          console.log(`${statusIcon} [${proposal.priority}] ${proposal.title}`);
+          console.log(`  ID: ${proposal.proposal_id}`);
+          console.log(`  Category: ${proposal.category_id}`);
+          console.log(`  Status: ${proposal.status}`);
+          console.log(`  Incidents: ${proposal.rationale.incident_count}`);
+          console.log(`  Created: ${proposal.created_at}`);
+          console.log('');
+        }
+      }
+    }
+  });
+
+// ============================================================
+// Subcommand: fixes-show
+// ============================================================
+program
+  .command('fixes-show')
+  .description('Show fix proposal details')
+  .argument('<proposal_id>', 'Proposal ID')
+  .option('--json', 'Output as JSON')
+  .action(async (proposalId: string, opts) => {
+    const { getFixProposalStore } = require('../data/FixProposalStore');
+    const store = getFixProposalStore();
+    const json = opts.json || false;
+
+    const proposal = store.getProposal(proposalId);
+
+    if (!proposal) {
+      if (json) {
+        console.log(JSON.stringify({ success: false, error: 'Proposal not found' }, null, 2));
+      } else {
+        console.error(`Proposal not found: ${proposalId}`);
+      }
+      process.exit(1);
+    }
+
+    if (json) {
+      console.log(JSON.stringify({ success: true, proposal }, null, 2));
+    } else {
+      console.log('='.repeat(60));
+      console.log('Fix Proposal Details');
+      console.log('='.repeat(60));
+      console.log('');
+      console.log(`ID: ${proposal.proposal_id}`);
+      console.log(`Priority: ${proposal.priority}`);
+      console.log(`Title: ${proposal.title}`);
+      console.log(`Category: ${proposal.category_id}`);
+      console.log(`Status: ${proposal.status}`);
+      console.log(`Created: ${proposal.created_at} by ${proposal.created_by}`);
+      console.log('');
+      console.log('Rationale:');
+      console.log(`  Incident Count: ${proposal.rationale.incident_count}`);
+      if (proposal.rationale.recent_examples && proposal.rationale.recent_examples.length > 0) {
+        console.log(`  Recent Examples: ${proposal.rationale.recent_examples.join(', ')}`);
+      }
+      console.log('');
+      console.log('Recommended Steps:');
+      for (const step of proposal.recommended_steps) {
+        console.log(`  ${step}`);
+      }
+      console.log('');
+      if (proposal.related_artifacts.files && proposal.related_artifacts.files.length > 0) {
+        console.log(`Related Files: ${proposal.related_artifacts.files.join(', ')}`);
+      }
+      if (proposal.related_artifacts.commands && proposal.related_artifacts.commands.length > 0) {
+        console.log(`Related Commands: ${proposal.related_artifacts.commands.join(', ')}`);
+      }
+      console.log('');
+      console.log('Source:');
+      console.log(`  Report Since: ${proposal.source.report_since}`);
+      console.log(`  Top Categories: ${proposal.source.top_categories.join(', ')}`);
+
+      if (proposal.status !== 'proposed') {
+        console.log('');
+        console.log('Status History:');
+        if (proposal.accepted_at) {
+          console.log(`  Accepted: ${proposal.accepted_at} by ${proposal.accepted_by}`);
+        }
+        if (proposal.rejected_at) {
+          console.log(`  Rejected: ${proposal.rejected_at} by ${proposal.rejected_by}`);
+          if (proposal.rejection_reason) {
+            console.log(`  Rejection Reason: ${proposal.rejection_reason}`);
+          }
+        }
+        if (proposal.implemented_at) {
+          console.log(`  Implemented: ${proposal.implemented_at} by ${proposal.implemented_by}`);
+        }
+      }
+
+      console.log('');
+      console.log('IMPORTANT: Proposals are NOT auto-applied.');
+      console.log('Review steps and implement manually.');
+    }
+  });
+
 // Parse and run
 program.parse();
 

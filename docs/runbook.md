@@ -2235,6 +2235,128 @@ npx ts-node src/cli/run_ops.ts incident close <incident_id> \
 - 返信率低下の原因を調査
 ```
 
+### 7.26 再発防止提案（P4-8）
+
+インシデントの原因カテゴリに応じて、再発防止の「対策案」を自動生成し提案として蓄積します。
+
+> **重要**: 提案は自動適用されません。人間がレビューして手動で実装します。
+
+#### 提案の優先度定義
+
+| 優先度 | 説明 | 対応目安 |
+|--------|------|----------|
+| **P0** | 緊急対応が必要（自動停止等） | 当日中 |
+| **P1** | 重要な改善が必要 | 1週間以内 |
+| **P2** | 改善が望ましい | 次回スプリント |
+
+#### fixes-propose コマンド
+
+```bash
+# 週次提案生成（デフォルト7日、Top3カテゴリ）
+npx ts-node src/cli/run_ops.ts fixes-propose
+
+# 期間・カテゴリ数指定
+npx ts-node src/cli/run_ops.ts fixes-propose --since "2026-01-20" --top 5
+
+# ドライラン（保存しない）
+npx ts-node src/cli/run_ops.ts fixes-propose --dry-run
+
+# 通知付き
+npx ts-node src/cli/run_ops.ts fixes-propose --notify
+
+# JSON出力
+npx ts-node src/cli/run_ops.ts fixes-propose --json
+```
+
+#### fixes-list / fixes-show コマンド
+
+```bash
+# 提案一覧
+npx ts-node src/cli/run_ops.ts fixes-list
+
+# ステータスでフィルタ
+npx ts-node src/cli/run_ops.ts fixes-list --status proposed
+
+# 提案詳細
+npx ts-node src/cli/run_ops.ts fixes-show <proposal_id>
+```
+
+#### 提案のステータス
+
+| ステータス | 説明 |
+|------------|------|
+| `proposed` | 提案済み（レビュー待ち） |
+| `accepted` | 承認済み（実装予定） |
+| `rejected` | 却下（対応不要と判断） |
+| `implemented` | 実装完了 |
+
+#### 週次運用ルーチン
+
+```bash
+# 1. インシデントレポート確認
+npx ts-node src/cli/run_ops.ts incidents-report --since "$(date -v-7d +%Y-%m-%d)"
+
+# 2. 再発防止提案を生成
+npx ts-node src/cli/run_ops.ts fixes-propose --since "$(date -v-7d +%Y-%m-%d)"
+
+# 3. 提案一覧を確認
+npx ts-node src/cli/run_ops.ts fixes-list --status proposed
+
+# 4. 個別提案を確認・対応
+npx ts-node src/cli/run_ops.ts fixes-show <proposal_id>
+# (手順に従って対応を実施)
+```
+
+#### 提案内容の例
+
+**[P0] [自動停止発動] 自動停止原因の調査と対策**
+
+```
+Recommended Steps:
+  1. run_ops report --since で直近の送信統計を確認
+  2. run_ops safety --experiment で実験の健全性を確認
+  3. 返信率低下の原因を特定
+  4. 必要に応じて run_ops rollback で問題のある実験を停止
+  5. ramp cap を縮小して慎重に再開
+  6. run_ops resume-send --reason "調査完了" で再開
+
+Related Files: config/auto_stop.json, config/experiments.json
+Related Commands: run_ops report, run_ops safety, run_ops rollback
+```
+
+#### 提案データ形式
+
+提案は `data/fix_proposals.ndjson` に保存されます（PIIを含まない）。
+
+```json
+{
+  "proposal_id": "FIX-20260127-a1b2c3d4",
+  "created_at": "2026-01-27T10:00:00.000Z",
+  "created_by": "auto",
+  "source": {
+    "report_since": "2026-01-20",
+    "top_categories": ["auto_stop_triggered", "policy_config"]
+  },
+  "category_id": "auto_stop_triggered",
+  "priority": "P0",
+  "title": "[自動停止発動] 自動停止原因の調査と対策",
+  "recommended_steps": ["Step 1...", "Step 2..."],
+  "related_artifacts": {
+    "files": ["config/auto_stop.json"],
+    "commands": ["run_ops report"]
+  },
+  "status": "proposed",
+  "rationale": {
+    "incident_count": 3,
+    "recent_examples": ["INC-001", "INC-002"]
+  }
+}
+```
+
+#### 重複排除
+
+同一カテゴリで直近7日以内に `proposed` または `accepted` ステータスの提案が存在する場合、新しい提案は生成されません。これにより重複した提案の氾濫を防ぎます。
+
 ### 7.17 推奨送信ワークフロー
 
 下書き作成から送信までの推奨フローです。
