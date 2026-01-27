@@ -1,0 +1,12 @@
+[Unit]
+Description=AI-Sales Daily Operations Timer
+Requires=ai_sales_daily.service
+
+[Timer]
+# Run at 6:00 AM every day (local time)
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

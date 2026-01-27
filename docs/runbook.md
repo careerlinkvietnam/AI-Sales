@@ -3138,6 +3138,185 @@ npx ts-node src/cli/run_ops.ts rollback \
 6. [ ] 問題解決後、`resume-send` で送信再開
 7. [ ] 必要に応じて experiments.json を編集して実験再開
 
+### 8.5 自動化スケジューリング（run_ops プリセット）
+
+日次/週次運用を自動化するためのプリセットコマンドとスケジューラテンプレートを提供します。
+
+#### 日次プリセット (daily)
+
+毎日実行する運用タスクをまとめたコマンドです。
+
+```bash
+# ドライラン（推奨：最初はドライランで動作確認）
+npx ts-node src/cli/run_ops.ts daily
+
+# 実行モード
+npx ts-node src/cli/run_ops.ts daily --execute
+
+# オプション
+npx ts-node src/cli/run_ops.ts daily --execute --since 2026-01-20 --max-jobs 20 --json
+```
+
+**実行内容**:
+1. `reap` - スタックしたキュージョブの回収
+2. `auto-stop` - 失敗率が高い場合の自動停止評価
+3. `scan` - Gmail送信/返信のスキャン
+4. `send-queue process` - 送信キューの処理
+5. `report` - 日次レポート生成
+6. `data status` - データファイルサイズ確認
+
+#### 週次プリセット (weekly)
+
+週1回実行する運用タスクをまとめたコマンドです。
+
+```bash
+# ドライラン
+npx ts-node src/cli/run_ops.ts weekly
+
+# 実行モード
+npx ts-node src/cli/run_ops.ts weekly --execute
+
+# オプション
+npx ts-node src/cli/run_ops.ts weekly --execute --since 2026-01-20 --json
+```
+
+**実行内容**:
+1. `incidents-report` - インシデントレポート生成
+2. `fixes-propose` - 修正提案の生成
+3. `data compact` - データファイルのコンパクション
+4. `report` - 週次レポート生成
+
+#### ヘルスチェック (health)
+
+システム全体のヘルス状態を確認するコマンドです。
+
+```bash
+# 通常出力
+npx ts-node src/cli/run_ops.ts health
+
+# JSON出力（監視システム連携用）
+npx ts-node src/cli/run_ops.ts health --json
+```
+
+**チェック項目**:
+- **Kill Switch**: ランタイム/環境変数による停止状態
+- **Send Queue**: キュー状態（queued, in_progress, dead_letter）
+- **Incidents**: オープン中のインシデント数
+- **Metrics**: 返信率（windowDays期間）
+- **Data Files**: データファイルサイズ
+
+**ステータス判定**:
+| ステータス | 条件 |
+|------------|------|
+| `critical` | Kill Switch有効 |
+| `warning` | dead_letter > 0, オープンインシデント > 0, 返信率 < 2% |
+| `ok` | 上記以外 |
+
+#### 設定ファイル (config/ops_schedule.json)
+
+```json
+{
+  "daily": {
+    "send_queue_max_jobs": 10,
+    "reap_execute": true,
+    "auto_stop_execute": false,
+    "scan_since_days": 1,
+    "report_since_days": 7,
+    "notify_report": true,
+    "comment": "auto_stop_execute=false は最初は手動確認推奨。安定したらtrueに変更。"
+  },
+  "weekly": {
+    "compact_target": "all",
+    "compact_execute": false,
+    "incidents_since_days": 7,
+    "fixes_top": 3,
+    "notify_incidents": true,
+    "notify_fixes": true,
+    "comment": "compact_execute=false は最初は手動確認推奨。確認後trueに変更。"
+  },
+  "health": {
+    "window_days": 3,
+    "comment": "ヘルスチェックの評価期間"
+  }
+}
+```
+
+#### スケジューラテンプレート生成
+
+cronやsystemdのテンプレートファイルを自動生成します。
+
+```bash
+# テンプレート生成
+npx ts-node src/cli/generate_scheduler_templates.ts
+
+# 出力先を指定
+npx ts-node src/cli/generate_scheduler_templates.ts --output-dir /tmp/scheduler
+
+# JSON出力
+npx ts-node src/cli/generate_scheduler_templates.ts --json
+```
+
+**生成ファイル** (`docs/ops/` 配下):
+
+| ファイル | 説明 |
+|----------|------|
+| `cron_daily.txt` | 日次用cron設定例 |
+| `cron_weekly.txt` | 週次用cron設定例 |
+| `systemd/ai_sales_daily.service` | 日次用systemdサービス |
+| `systemd/ai_sales_daily.timer` | 日次用systemdタイマー（6:00） |
+| `systemd/ai_sales_weekly.service` | 週次用systemdサービス |
+| `systemd/ai_sales_weekly.timer` | 週次用systemdタイマー（日曜7:00） |
+| `systemd/ai_sales_health.service` | ヘルスチェック用サービス |
+| `systemd/ai_sales_health.timer` | ヘルスチェック用タイマー（4時間毎） |
+| `systemd/INSTALL.md` | インストール手順 |
+
+#### cron設定例
+
+```cron
+# 日次（毎日6:00）- ドライラン
+0 6 * * * cd /path/to/AI-Sales && npx ts-node src/cli/run_ops.ts daily --json >> /var/log/ai_sales_daily.log 2>&1
+
+# 日次（毎日6:00）- 実行モード
+0 6 * * * cd /path/to/AI-Sales && npx ts-node src/cli/run_ops.ts daily --execute --json >> /var/log/ai_sales_daily.log 2>&1
+
+# 週次（日曜7:00）- ドライラン
+0 7 * * 0 cd /path/to/AI-Sales && npx ts-node src/cli/run_ops.ts weekly --json >> /var/log/ai_sales_weekly.log 2>&1
+
+# ヘルスチェック（4時間毎）
+0 */4 * * * cd /path/to/AI-Sales && npx ts-node src/cli/run_ops.ts health --json >> /var/log/ai_sales_health.log 2>&1
+```
+
+#### systemd設定
+
+詳細は `docs/ops/systemd/INSTALL.md` を参照してください。
+
+```bash
+# 1. テンプレート生成
+npx ts-node src/cli/generate_scheduler_templates.ts
+
+# 2. サービスファイルをコピー
+sudo cp docs/ops/systemd/*.service /etc/systemd/system/
+sudo cp docs/ops/systemd/*.timer /etc/systemd/system/
+
+# 3. タイマー有効化
+sudo systemctl daemon-reload
+sudo systemctl enable --now ai_sales_daily.timer
+sudo systemctl enable --now ai_sales_weekly.timer
+sudo systemctl enable --now ai_sales_health.timer
+
+# 4. 状態確認
+systemctl list-timers --all | grep ai_sales
+```
+
+#### 導入推奨ステップ
+
+1. **初期設定**: `ops_schedule.json` で `execute` 系を `false` に設定
+2. **ドライラン確認**: 手動で `daily`, `weekly` を実行し出力を確認
+3. **cronセットアップ**: ドライランモードでcron登録
+4. **ログ確認**: 数日間ログを確認し問題がないことを確認
+5. **実行モード移行**: `ops_schedule.json` の `execute` 系を `true` に変更
+6. **継続監視**: `health` コマンドで定期的にヘルス状態を確認
+
 ---
 
 ## 9. 連絡先
@@ -3170,3 +3349,4 @@ npx ts-node src/cli/run_ops.ts rollback \
 | 2026-01-26 | P4-5: 運用イベント通知 - WebhookNotifier, NotificationRouter, notify-test サブコマンド, PII-free通知設計 |
 | 2026-01-27 | P4-10: 送信キュー - SendQueueStore, RetryPolicy, SendQueueManager, process_send_queue CLI, send_draft enqueue デフォルト化, send-queue サブコマンド |
 | 2026-01-27 | P4-11: 詰まり防止・肥大化対策 - ReapStaleQueueJobs, NdjsonCompactor, in_progress_started_at, send-queue reap, data compact/status サブコマンド, SEND_QUEUE_REAPED 通知 |
+| 2026-01-27 | P4-12: 日次/週次自動運用 - run_ops daily/weekly/health プリセット, config/ops_schedule.json, generate_scheduler_templates CLI, cron/systemdテンプレート |

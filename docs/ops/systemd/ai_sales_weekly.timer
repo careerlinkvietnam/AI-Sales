@@ -1,0 +1,12 @@
+[Unit]
+Description=AI-Sales Weekly Operations Timer
+Requires=ai_sales_weekly.service
+
+[Timer]
+# Run at 7:00 AM every Sunday (local time)
+OnCalendar=Sun *-*-* 07:00:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

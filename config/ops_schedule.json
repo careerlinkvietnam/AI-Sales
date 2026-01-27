@@ -1,0 +1,24 @@
+{
+  "daily": {
+    "send_queue_max_jobs": 10,
+    "reap_execute": true,
+    "auto_stop_execute": false,
+    "scan_since_days": 1,
+    "report_since_days": 7,
+    "notify_report": true,
+    "comment": "auto_stop_execute=false は最初は手動確認推奨。安定したらtrueに変更。"
+  },
+  "weekly": {
+    "compact_target": "all",
+    "compact_execute": false,
+    "incidents_since_days": 7,
+    "fixes_top": 3,
+    "notify_incidents": true,
+    "notify_fixes": true,
+    "comment": "compact_execute=false は最初は手動確認推奨。確認後trueに変更。"
+  },
+  "health": {
+    "window_days": 3,
+    "comment": "ヘルスチェックの評価期間"
+  }
+}

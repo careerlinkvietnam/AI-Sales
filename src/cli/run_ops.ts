@@ -1538,12 +1538,13 @@ program
         console.log('No proposals found.');
       } else {
         for (const proposal of proposals) {
-          const statusIcon = {
+          const statusIcons: Record<string, string> = {
             proposed: '📋',
             accepted: '✅',
             rejected: '❌',
             implemented: '✨',
-          }[proposal.status] || '?';
+          };
+          const statusIcon = statusIcons[proposal.status as string] || '?';
 
           console.log(`${statusIcon} [${proposal.priority}] ${proposal.title}`);
           console.log(`  ID: ${proposal.proposal_id}`);
@@ -1623,12 +1624,13 @@ program
         console.log('');
         console.log('Event History:');
         for (const event of history) {
-          const actionIcon = {
+          const actionIcons: Record<string, string> = {
             ACCEPT: '✅',
             REJECT: '❌',
             IMPLEMENT: '✨',
             NOTE: '📝',
-          }[event.action] || '?';
+          };
+          const actionIcon = actionIcons[event.action as string] || '?';
           console.log(`  ${actionIcon} [${event.timestamp}] ${event.action} by ${event.actor}`);
           console.log(`     ${event.reason}`);
           if (event.links) {
@@ -1950,7 +1952,7 @@ program
     switch (action) {
       case 'status': {
         const counts = manager.getStatusCounts();
-        const total = Object.values(counts).reduce((a: number, b: number) => a + b, 0);
+        const total = (Object.values(counts) as number[]).reduce((a, b) => a + b, 0);
 
         if (json) {
           console.log(JSON.stringify({
@@ -2206,10 +2208,545 @@ program
     }
   });
 
-// Parse and run
-program.parse();
+// ============================================================
+// Ops Schedule Config
+// ============================================================
+export interface OpsScheduleConfig {
+  daily: {
+    send_queue_max_jobs: number;
+    reap_execute: boolean;
+    auto_stop_execute: boolean;
+    scan_since_days: number;
+    report_since_days: number;
+    notify_report: boolean;
+  };
+  weekly: {
+    compact_target: string;
+    compact_execute: boolean;
+    incidents_since_days: number;
+    fixes_top: number;
+    notify_incidents: boolean;
+    notify_fixes: boolean;
+  };
+  health: {
+    window_days: number;
+  };
+}
 
-// If no command provided, show help
-if (process.argv.length <= 2) {
-  program.help();
+export function loadOpsScheduleConfig(customConfigPath?: string): OpsScheduleConfig {
+  const fs = require('fs');
+  const configPath = customConfigPath || path.join(process.cwd(), 'config', 'ops_schedule.json');
+
+  const defaults: OpsScheduleConfig = {
+    daily: {
+      send_queue_max_jobs: 10,
+      reap_execute: true,
+      auto_stop_execute: false,
+      scan_since_days: 1,
+      report_since_days: 7,
+      notify_report: true,
+    },
+    weekly: {
+      compact_target: 'all',
+      compact_execute: false,
+      incidents_since_days: 7,
+      fixes_top: 3,
+      notify_incidents: true,
+      notify_fixes: true,
+    },
+    health: {
+      window_days: 3,
+    },
+  };
+
+  try {
+    if (fs.existsSync(configPath)) {
+      const content = fs.readFileSync(configPath, 'utf-8');
+      const config = JSON.parse(content);
+      return {
+        daily: { ...defaults.daily, ...config.daily },
+        weekly: { ...defaults.weekly, ...config.weekly },
+        health: { ...defaults.health, ...config.health },
+      };
+    }
+  } catch {
+    // Use defaults
+  }
+
+  return defaults;
+}
+
+function formatDateAgo(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().split('T')[0];
+}
+
+// ============================================================
+// Subcommand: daily
+// ============================================================
+program
+  .command('daily')
+  .description('Run daily operations routine (reap, auto-stop, scan, process, report)')
+  .option('--execute', 'Actually execute operations (default is dry-run)')
+  .option('--since <date>', 'Override since date (YYYY-MM-DD)')
+  .option('--max-jobs <n>', 'Override max jobs for send-queue process')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    const config = loadOpsScheduleConfig();
+    const execute = opts.execute || false;
+    const json = opts.json || false;
+    const since = opts.since || formatDateAgo(config.daily.scan_since_days);
+    const reportSince = formatDateAgo(config.daily.report_since_days);
+    const maxJobs = opts.maxJobs || config.daily.send_queue_max_jobs;
+
+    const results: Record<string, any> = {
+      mode: execute ? 'execute' : 'dry-run',
+      timestamp: new Date().toISOString(),
+      steps: [],
+    };
+
+    if (!json) {
+      console.log('='.repeat(70));
+      console.log(`Daily Operations (${execute ? 'EXECUTE' : 'DRY RUN'})`);
+      console.log('='.repeat(70));
+      console.log('');
+    }
+
+    try {
+      // Step 1: Reap stale jobs
+      if (!json) {
+        console.log('Step 1: Reap stale queue jobs...');
+      }
+      const { reapStaleJobs } = require('../jobs/ReapStaleQueueJobs');
+      const reapResult = reapStaleJobs({
+        execute: execute && config.daily.reap_execute,
+        notify: execute && config.daily.reap_execute,
+      });
+      results.steps.push({ name: 'reap', result: reapResult });
+      if (!json) {
+        console.log(`  Found: ${reapResult.staleJobsFound} stale jobs`);
+        console.log(`  Requeued: ${reapResult.requeued}, Dead Lettered: ${reapResult.deadLettered}`);
+        console.log('');
+      }
+
+      // Step 2: Auto-stop evaluation
+      if (!json) {
+        console.log('Step 2: Auto-stop evaluation...');
+      }
+      const autoStopResult = runAutoStopJob({
+        dryRun: !execute || !config.daily.auto_stop_execute,
+      });
+      results.steps.push({ name: 'auto_stop', result: autoStopResult });
+      if (!json) {
+        console.log(`  Should stop: ${autoStopResult.should_stop ? 'YES' : 'No'}`);
+        if (autoStopResult.reasons.length > 0) {
+          for (const reason of autoStopResult.reasons) {
+            console.log(`    - ${reason}`);
+          }
+        }
+        if (autoStopResult.stopped) {
+          console.log('  ACTION: Sending stopped via RuntimeKillSwitch');
+        }
+        console.log('');
+      }
+
+      // Check if we should continue (kill switch might be active now)
+      const killSwitch = getRuntimeKillSwitch();
+      if (killSwitch.isEnabled()) {
+        if (!json) {
+          console.log('NOTICE: Kill switch is active. Skipping send-queue process.');
+          console.log('');
+        }
+        results.steps.push({ name: 'send_queue_process', skipped: true, reason: 'kill_switch_active' });
+      } else {
+        // Step 3: Scan Gmail
+        if (!json) {
+          console.log('Step 3: Scan Gmail responses...');
+        }
+        try {
+          const scanArgs = ['--since', since];
+          if (json) scanArgs.push('--json');
+          await execCli('scan_gmail_responses', scanArgs);
+          results.steps.push({ name: 'scan', success: true, since });
+        } catch (error) {
+          results.steps.push({ name: 'scan', success: false, error: (error as Error).message });
+          if (!json) {
+            console.log(`  Warning: Scan failed - ${(error as Error).message}`);
+          }
+        }
+        if (!json) {
+          console.log('');
+        }
+
+        // Step 4: Process send queue
+        if (!json) {
+          console.log('Step 4: Process send queue...');
+        }
+        if (execute) {
+          try {
+            const processArgs = ['--max-jobs', String(maxJobs), '--execute'];
+            if (json) processArgs.push('--json');
+            await execCli('process_send_queue', processArgs);
+            results.steps.push({ name: 'send_queue_process', success: true, maxJobs });
+          } catch (error) {
+            results.steps.push({ name: 'send_queue_process', success: false, error: (error as Error).message });
+            if (!json) {
+              console.log(`  Warning: Process failed - ${(error as Error).message}`);
+            }
+          }
+        } else {
+          if (!json) {
+            console.log(`  Would process up to ${maxJobs} jobs`);
+          }
+          results.steps.push({ name: 'send_queue_process', skipped: true, reason: 'dry_run', maxJobs });
+        }
+        if (!json) {
+          console.log('');
+        }
+      }
+
+      // Step 5: Report
+      if (!json) {
+        console.log('Step 5: Generate report...');
+      }
+      try {
+        const reportArgs = ['--since', reportSince];
+        await execCli('report_ab_metrics', reportArgs);
+        results.steps.push({ name: 'report', success: true, since: reportSince });
+      } catch (error) {
+        results.steps.push({ name: 'report', success: false, error: (error as Error).message });
+      }
+      if (!json) {
+        console.log('');
+      }
+
+      // Step 6: Data status
+      if (!json) {
+        console.log('Step 6: Data status...');
+      }
+      const { getDataFileStatus, formatBytes } = require('../data/NdjsonCompactor');
+      const dataFiles = ['send_queue', 'metrics', 'incidents'];
+      const dataStatus: Record<string, any> = {};
+      for (const name of dataFiles) {
+        const status = getDataFileStatus(path.join(process.cwd(), 'data', `${name}.ndjson`));
+        dataStatus[name] = { lines: status.lines, size: formatBytes(status.sizeBytes) };
+      }
+      results.steps.push({ name: 'data_status', data: dataStatus });
+      if (!json) {
+        for (const [name, status] of Object.entries(dataStatus)) {
+          console.log(`  ${name}: ${(status as any).lines} lines, ${(status as any).size}`);
+        }
+        console.log('');
+      }
+
+      // Final summary
+      results.success = true;
+      if (json) {
+        console.log(JSON.stringify(results, null, 2));
+      } else {
+        console.log('='.repeat(70));
+        console.log('Daily operations completed.');
+        if (!execute) {
+          console.log('This was a DRY RUN. Use --execute to perform operations.');
+        }
+      }
+    } catch (error) {
+      results.success = false;
+      results.error = (error as Error).message;
+      if (json) {
+        console.log(JSON.stringify(results, null, 2));
+      } else {
+        console.error('Daily operations failed:', (error as Error).message);
+      }
+      process.exit(1);
+    }
+  });
+
+// ============================================================
+// Subcommand: weekly
+// ============================================================
+program
+  .command('weekly')
+  .description('Run weekly operations routine (incidents, fixes, compact, report)')
+  .option('--execute', 'Actually execute operations (default is dry-run)')
+  .option('--since <date>', 'Override since date for incidents (YYYY-MM-DD)')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    const config = loadOpsScheduleConfig();
+    const execute = opts.execute || false;
+    const json = opts.json || false;
+    const since = opts.since || formatDateAgo(config.weekly.incidents_since_days);
+
+    const results: Record<string, any> = {
+      mode: execute ? 'execute' : 'dry-run',
+      timestamp: new Date().toISOString(),
+      steps: [],
+    };
+
+    if (!json) {
+      console.log('='.repeat(70));
+      console.log(`Weekly Operations (${execute ? 'EXECUTE' : 'DRY RUN'})`);
+      console.log('='.repeat(70));
+      console.log('');
+    }
+
+    try {
+      // Step 1: Incidents report
+      if (!json) {
+        console.log('Step 1: Incidents report...');
+      }
+      try {
+        const incArgs = ['--since', since];
+        if (config.weekly.notify_incidents && execute) incArgs.push('--notify');
+        await execCli('report_incidents', incArgs);
+        results.steps.push({ name: 'incidents_report', success: true, since });
+      } catch (error) {
+        results.steps.push({ name: 'incidents_report', success: false, error: (error as Error).message });
+        if (!json) {
+          console.log(`  Warning: Incidents report failed - ${(error as Error).message}`);
+        }
+      }
+      if (!json) {
+        console.log('');
+      }
+
+      // Step 2: Fixes propose
+      if (!json) {
+        console.log('Step 2: Propose fixes...');
+      }
+      try {
+        const fixArgs = ['--since', since, '--top', String(config.weekly.fixes_top)];
+        if (config.weekly.notify_fixes && execute) fixArgs.push('--notify');
+        fixArgs.push('--dry-run'); // Fixes are always proposed, not auto-applied
+        await execCli('propose_fixes', fixArgs);
+        results.steps.push({ name: 'fixes_propose', success: true, since, top: config.weekly.fixes_top });
+      } catch (error) {
+        results.steps.push({ name: 'fixes_propose', success: false, error: (error as Error).message });
+        if (!json) {
+          console.log(`  Warning: Fixes propose failed - ${(error as Error).message}`);
+        }
+      }
+      if (!json) {
+        console.log('');
+      }
+
+      // Step 3: Data compact
+      if (!json) {
+        console.log('Step 3: Data compact...');
+      }
+      try {
+        const compactArgs = ['--target', config.weekly.compact_target];
+        if (execute && config.weekly.compact_execute) compactArgs.push('--execute');
+        await execCli('compact_data', compactArgs);
+        results.steps.push({
+          name: 'data_compact',
+          success: true,
+          target: config.weekly.compact_target,
+          executed: execute && config.weekly.compact_execute,
+        });
+      } catch (error) {
+        results.steps.push({ name: 'data_compact', success: false, error: (error as Error).message });
+        if (!json) {
+          console.log(`  Warning: Data compact failed - ${(error as Error).message}`);
+        }
+      }
+      if (!json) {
+        console.log('');
+      }
+
+      // Step 4: Report (markdown)
+      if (!json) {
+        console.log('Step 4: Generate report...');
+      }
+      try {
+        const reportArgs = ['--since', since, '--markdown'];
+        await execCli('report_ab_metrics', reportArgs);
+        results.steps.push({ name: 'report', success: true, since, format: 'markdown' });
+      } catch (error) {
+        results.steps.push({ name: 'report', success: false, error: (error as Error).message });
+        if (!json) {
+          console.log(`  Warning: Report failed - ${(error as Error).message}`);
+        }
+      }
+      if (!json) {
+        console.log('');
+      }
+
+      // Final summary
+      results.success = true;
+      if (json) {
+        console.log(JSON.stringify(results, null, 2));
+      } else {
+        console.log('='.repeat(70));
+        console.log('Weekly operations completed.');
+        if (!execute) {
+          console.log('This was a DRY RUN. Use --execute to perform operations.');
+        }
+      }
+    } catch (error) {
+      results.success = false;
+      results.error = (error as Error).message;
+      if (json) {
+        console.log(JSON.stringify(results, null, 2));
+      } else {
+        console.error('Weekly operations failed:', (error as Error).message);
+      }
+      process.exit(1);
+    }
+  });
+
+// ============================================================
+// Subcommand: health
+// ============================================================
+program
+  .command('health')
+  .description('Show system health status (kill switch, queue, incidents, metrics, data)')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    const config = loadOpsScheduleConfig();
+    const json = opts.json || false;
+
+    const killSwitch = getRuntimeKillSwitch();
+    const policy = getSendPolicy();
+    const { getSendQueueManager } = require('../domain/SendQueueManager');
+    const manager = getSendQueueManager();
+    const incidentManager = getIncidentManager();
+    const metricsStore = getMetricsStore();
+    const { getDataFileStatus, formatBytes } = require('../data/NdjsonCompactor');
+
+    // Gather health data
+    const killSwitchState = killSwitch.getState();
+    const queueCounts = manager.getStatusCounts();
+    const openIncidents = incidentManager.listIncidents({ status: 'open' });
+
+    // Calculate reply rate from auto-stop metrics
+    const autoStopResult = runAutoStopJob({ dryRun: true });
+
+    // Data file status
+    const dataFiles = ['send_queue', 'metrics', 'incidents'];
+    const dataStatus: Record<string, any> = {};
+    for (const name of dataFiles) {
+      const status = getDataFileStatus(path.join(process.cwd(), 'data', `${name}.ndjson`));
+      dataStatus[name] = {
+        exists: status.exists,
+        lines: status.lines,
+        sizeBytes: status.sizeBytes,
+        sizeFormatted: formatBytes(status.sizeBytes),
+      };
+    }
+
+    const health = {
+      timestamp: new Date().toISOString(),
+      overall: 'ok' as 'ok' | 'warning' | 'critical',
+      issues: [] as string[],
+      killSwitch: {
+        runtimeEnabled: killSwitch.isEnabled(),
+        envEnabled: policy.getConfig().killSwitch,
+        reason: killSwitchState?.reason || null,
+        setBy: killSwitchState?.set_by || null,
+      },
+      sendQueue: {
+        queued: queueCounts.queued,
+        inProgress: queueCounts.in_progress,
+        deadLetter: queueCounts.dead_letter,
+        sent: queueCounts.sent,
+        failed: queueCounts.failed,
+      },
+      incidents: {
+        openCount: openIncidents.length,
+        openIds: openIncidents.map((i: any) => i.incident_id),
+      },
+      metrics: {
+        windowDays: config.health.window_days,
+        totalSent: autoStopResult.metrics.totalSent,
+        totalReplies: autoStopResult.metrics.totalReplies,
+        replyRate: autoStopResult.metrics.replyRate,
+        totalBlocked: autoStopResult.metrics.totalBlocked,
+      },
+      data: dataStatus,
+    };
+
+    // Determine overall health
+    if (health.killSwitch.runtimeEnabled || health.killSwitch.envEnabled) {
+      health.overall = 'critical';
+      health.issues.push('Kill switch is active');
+    }
+    if (health.sendQueue.deadLetter > 0) {
+      health.overall = health.overall === 'critical' ? 'critical' : 'warning';
+      health.issues.push(`${health.sendQueue.deadLetter} job(s) in dead letter`);
+    }
+    if (health.incidents.openCount > 0) {
+      health.overall = health.overall === 'critical' ? 'critical' : 'warning';
+      health.issues.push(`${health.incidents.openCount} open incident(s)`);
+    }
+    if (health.metrics.replyRate !== null && health.metrics.replyRate < 0.02) {
+      health.overall = health.overall === 'critical' ? 'critical' : 'warning';
+      health.issues.push(`Low reply rate: ${(health.metrics.replyRate * 100).toFixed(1)}%`);
+    }
+
+    if (json) {
+      console.log(JSON.stringify(health, null, 2));
+    } else {
+      console.log('='.repeat(60));
+      console.log('System Health');
+      console.log('='.repeat(60));
+      console.log('');
+
+      const statusIcon = health.overall === 'ok' ? '[OK]' : health.overall === 'warning' ? '[WARN]' : '[CRIT]';
+      console.log(`Overall: ${statusIcon} ${health.overall.toUpperCase()}`);
+      console.log('');
+
+      if (health.issues.length > 0) {
+        console.log('Issues:');
+        for (const issue of health.issues) {
+          console.log(`  - ${issue}`);
+        }
+        console.log('');
+      }
+
+      console.log('Kill Switch:');
+      console.log(`  Runtime: ${health.killSwitch.runtimeEnabled ? 'ACTIVE' : 'Inactive'}`);
+      console.log(`  Environment: ${health.killSwitch.envEnabled ? 'ACTIVE' : 'Inactive'}`);
+      if (health.killSwitch.reason) {
+        console.log(`  Reason: ${health.killSwitch.reason}`);
+      }
+      console.log('');
+
+      console.log('Send Queue:');
+      console.log(`  Queued: ${health.sendQueue.queued}`);
+      console.log(`  In Progress: ${health.sendQueue.inProgress}`);
+      console.log(`  Dead Letter: ${health.sendQueue.deadLetter}`);
+      console.log(`  Sent: ${health.sendQueue.sent}`);
+      console.log('');
+
+      console.log('Incidents:');
+      console.log(`  Open: ${health.incidents.openCount}`);
+      if (health.incidents.openCount > 0) {
+        console.log(`  IDs: ${health.incidents.openIds.join(', ')}`);
+      }
+      console.log('');
+
+      console.log(`Metrics (${health.metrics.windowDays}d window):`);
+      console.log(`  Sent: ${health.metrics.totalSent}`);
+      console.log(`  Replies: ${health.metrics.totalReplies}`);
+      console.log(`  Reply Rate: ${health.metrics.replyRate !== null ? (health.metrics.replyRate * 100).toFixed(1) + '%' : 'N/A'}`);
+      console.log(`  Blocked: ${health.metrics.totalBlocked}`);
+      console.log('');
+
+      console.log('Data Files:');
+      for (const [name, status] of Object.entries(health.data)) {
+        console.log(`  ${name}: ${(status as any).lines} lines, ${(status as any).sizeFormatted}`);
+      }
+    }
+  });
+
+// Parse and run (only when executed directly, not when imported)
+if (require.main === module) {
+  program.parse();
+
+  // If no command provided, show help
+  if (process.argv.length <= 2) {
+    program.help();
+  }
 }

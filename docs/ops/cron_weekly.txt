@@ -1,0 +1,26 @@
+# AI-Sales Weekly Operations
+# Schedule: Every Sunday at 7:00 AM JST (22:00 UTC Saturday)
+#
+# This cron job runs the weekly operations preset which includes:
+# - Generate incidents report (errors from past 7 days)
+# - Propose fixes for recurring issues
+# - Compact data files (reduce NDJSON duplicates)
+# - Generate weekly summary report
+#
+# Prerequisites:
+# - Node.js and npm installed
+# - Project dependencies installed (npm install)
+# - Environment variables configured in .env
+#
+# Installation:
+#   crontab -e
+#   # Add the following line (adjust path as needed):
+
+# Dry-run (recommended for initial deployment)
+0 7 * * 0 cd /path/to/AI-Sales && npx ts-node src/cli/run_ops.ts weekly --json >> /var/log/ai_sales_weekly.log 2>&1
+
+# Execute mode (enable after confirming dry-run works)
+# 0 7 * * 0 cd /path/to/AI-Sales && npx ts-node src/cli/run_ops.ts weekly --execute --json >> /var/log/ai_sales_weekly.log 2>&1
+
+# With notification (requires SLACK_WEBHOOK_URL in .env)
+# 0 7 * * 0 cd /path/to/AI-Sales && npx ts-node src/cli/run_ops.ts weekly --execute --json 2>&1 | tee -a /var/log/ai_sales_weekly.log

@@ -1,0 +1,26 @@
+[Unit]
+Description=AI-Sales Health Check
+After=network.target
+
+[Service]
+Type=oneshot
+User=ai_sales
+Group=ai_sales
+WorkingDirectory=/opt/ai_sales
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/ai_sales/.env
+
+ExecStart=/usr/bin/npx ts-node src/cli/run_ops.ts health --json
+
+StandardOutput=append:/var/log/ai_sales/health.log
+StandardError=append:/var/log/ai_sales/health.log
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/opt/ai_sales
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,28 @@
+# AI-Sales Daily Operations
+# Schedule: Every day at 6:00 AM JST (21:00 UTC previous day)
+#
+# This cron job runs the daily operations preset which includes:
+# - Reap stale queue jobs (recover stuck in_progress jobs)
+# - Auto-stop failed jobs (disabled by default, enable in config)
+# - Scan for errors
+# - Process send queue
+# - Generate daily report
+# - Check data file status
+#
+# Prerequisites:
+# - Node.js and npm installed
+# - Project dependencies installed (npm install)
+# - Environment variables configured in .env
+#
+# Installation:
+#   crontab -e
+#   # Add the following line (adjust path as needed):
+
+# Dry-run (recommended for initial deployment)
+0 6 * * * cd /path/to/AI-Sales && npx ts-node src/cli/run_ops.ts daily --json >> /var/log/ai_sales_daily.log 2>&1
+
+# Execute mode (enable after confirming dry-run works)
+# 0 6 * * * cd /path/to/AI-Sales && npx ts-node src/cli/run_ops.ts daily --execute --json >> /var/log/ai_sales_daily.log 2>&1
+
+# With notification (requires SLACK_WEBHOOK_URL in .env)
+# 0 6 * * * cd /path/to/AI-Sales && npx ts-node src/cli/run_ops.ts daily --execute --json 2>&1 | tee -a /var/log/ai_sales_daily.log

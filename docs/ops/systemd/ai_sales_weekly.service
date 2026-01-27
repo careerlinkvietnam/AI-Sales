@@ -1,0 +1,30 @@
+[Unit]
+Description=AI-Sales Weekly Operations
+After=network.target
+
+[Service]
+Type=oneshot
+User=ai_sales
+Group=ai_sales
+WorkingDirectory=/opt/ai_sales
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/ai_sales/.env
+
+# Dry-run mode (default, recommended for initial deployment)
+ExecStart=/usr/bin/npx ts-node src/cli/run_ops.ts weekly --json
+
+# Execute mode (uncomment after confirming dry-run works)
+# ExecStart=/usr/bin/npx ts-node src/cli/run_ops.ts weekly --execute --json
+
+StandardOutput=append:/var/log/ai_sales/weekly.log
+StandardError=append:/var/log/ai_sales/weekly.log
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/ai_sales/data /var/log/ai_sales
+
+[Install]
+WantedBy=multi-user.target
