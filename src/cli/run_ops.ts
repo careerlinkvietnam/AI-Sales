@@ -34,6 +34,9 @@ import {
   notifyOpsStopSend,
   notifyOpsResumeSend,
   notifyOpsRollback,
+  notifyFixProposalAccepted,
+  notifyFixProposalRejected,
+  notifyFixProposalImplemented,
   NotificationEvent,
 } from '../notifications';
 import { getIncidentManager, IncidentManager } from '../domain/IncidentManager';
@@ -1507,31 +1510,23 @@ program
 // ============================================================
 program
   .command('fixes-list')
-  .description('List fix proposals')
+  .description('List fix proposals (status computed from events)')
   .option('--status <status>', 'Filter by status (proposed, accepted, rejected, implemented)')
   .option('--json', 'Output as JSON')
   .action(async (opts) => {
-    const { getFixProposalStore } = require('../data/FixProposalStore');
-    const store = getFixProposalStore();
+    const { getFixProposalManager } = require('../domain/FixProposalManager');
+    const manager = getFixProposalManager();
     const json = opts.json || false;
     const statusFilter = opts.status as 'proposed' | 'accepted' | 'rejected' | 'implemented' | undefined;
 
-    const proposals = store.listProposals(statusFilter ? { status: statusFilter } : undefined);
+    const proposals = manager.listProposals(statusFilter ? { status: statusFilter } : undefined);
 
     if (json) {
       console.log(JSON.stringify({
         success: true,
         count: proposals.length,
         filter: statusFilter || 'all',
-        proposals: proposals.map((p: any) => ({
-          proposal_id: p.proposal_id,
-          status: p.status,
-          priority: p.priority,
-          category_id: p.category_id,
-          title: p.title,
-          created_at: p.created_at,
-          incident_count: p.rationale.incident_count,
-        })),
+        proposals,
       }, null, 2));
     } else {
       console.log('='.repeat(60));
@@ -1554,7 +1549,7 @@ program
           console.log(`  ID: ${proposal.proposal_id}`);
           console.log(`  Category: ${proposal.category_id}`);
           console.log(`  Status: ${proposal.status}`);
-          console.log(`  Incidents: ${proposal.rationale.incident_count}`);
+          console.log(`  Incidents: ${proposal.incident_count}`);
           console.log(`  Created: ${proposal.created_at}`);
           console.log('');
         }
@@ -1567,17 +1562,17 @@ program
 // ============================================================
 program
   .command('fixes-show')
-  .description('Show fix proposal details')
+  .description('Show fix proposal details with event history')
   .argument('<proposal_id>', 'Proposal ID')
   .option('--json', 'Output as JSON')
   .action(async (proposalId: string, opts) => {
-    const { getFixProposalStore } = require('../data/FixProposalStore');
-    const store = getFixProposalStore();
+    const { getFixProposalManager } = require('../domain/FixProposalManager');
+    const manager = getFixProposalManager();
     const json = opts.json || false;
 
-    const proposal = store.getProposal(proposalId);
+    const result = manager.getProposal(proposalId);
 
-    if (!proposal) {
+    if (!result) {
       if (json) {
         console.log(JSON.stringify({ success: false, error: 'Proposal not found' }, null, 2));
       } else {
@@ -1586,8 +1581,10 @@ program
       process.exit(1);
     }
 
+    const { proposal, status, history } = result;
+
     if (json) {
-      console.log(JSON.stringify({ success: true, proposal }, null, 2));
+      console.log(JSON.stringify({ success: true, proposal, status, history }, null, 2));
     } else {
       console.log('='.repeat(60));
       console.log('Fix Proposal Details');
@@ -1597,7 +1594,7 @@ program
       console.log(`Priority: ${proposal.priority}`);
       console.log(`Title: ${proposal.title}`);
       console.log(`Category: ${proposal.category_id}`);
-      console.log(`Status: ${proposal.status}`);
+      console.log(`Status: ${status.toUpperCase()}`);
       console.log(`Created: ${proposal.created_at} by ${proposal.created_by}`);
       console.log('');
       console.log('Rationale:');
@@ -1622,26 +1619,312 @@ program
       console.log(`  Report Since: ${proposal.source.report_since}`);
       console.log(`  Top Categories: ${proposal.source.top_categories.join(', ')}`);
 
-      if (proposal.status !== 'proposed') {
+      if (history.length > 0) {
         console.log('');
-        console.log('Status History:');
-        if (proposal.accepted_at) {
-          console.log(`  Accepted: ${proposal.accepted_at} by ${proposal.accepted_by}`);
-        }
-        if (proposal.rejected_at) {
-          console.log(`  Rejected: ${proposal.rejected_at} by ${proposal.rejected_by}`);
-          if (proposal.rejection_reason) {
-            console.log(`  Rejection Reason: ${proposal.rejection_reason}`);
+        console.log('Event History:');
+        for (const event of history) {
+          const actionIcon = {
+            ACCEPT: '✅',
+            REJECT: '❌',
+            IMPLEMENT: '✨',
+            NOTE: '📝',
+          }[event.action] || '?';
+          console.log(`  ${actionIcon} [${event.timestamp}] ${event.action} by ${event.actor}`);
+          console.log(`     ${event.reason}`);
+          if (event.links) {
+            const links: string[] = [];
+            if (event.links.ticket) links.push(`ticket=${event.links.ticket}`);
+            if (event.links.pr) links.push(`PR=${event.links.pr}`);
+            if (event.links.commit) links.push(`commit=${event.links.commit}`);
+            if (links.length > 0) {
+              console.log(`     Links: ${links.join(', ')}`);
+            }
           }
-        }
-        if (proposal.implemented_at) {
-          console.log(`  Implemented: ${proposal.implemented_at} by ${proposal.implemented_by}`);
         }
       }
 
       console.log('');
       console.log('IMPORTANT: Proposals are NOT auto-applied.');
       console.log('Review steps and implement manually.');
+
+      if (status === 'proposed') {
+        console.log('');
+        console.log('Actions:');
+        console.log(`  Accept: run_ops fixes-accept ${proposalId} --actor "..." --reason "..."`);
+        console.log(`  Reject: run_ops fixes-reject ${proposalId} --actor "..." --reason "..."`);
+      } else if (status === 'accepted') {
+        console.log('');
+        console.log('Actions:');
+        console.log(`  Implement: run_ops fixes-implement ${proposalId} --actor "..." --reason "..." [--pr ...]`);
+      }
+    }
+  });
+
+// ============================================================
+// Subcommand: fixes-accept
+// ============================================================
+program
+  .command('fixes-accept')
+  .description('Accept a fix proposal (marks for implementation)')
+  .argument('<proposal_id>', 'Proposal ID')
+  .requiredOption('--actor <actor>', 'Name/ID of the person accepting')
+  .requiredOption('--reason <reason>', 'Reason for accepting')
+  .option('--ticket <ticket>', 'Related ticket (e.g., JIRA-123)')
+  .option('--pr <pr>', 'Related PR number')
+  .option('--commit <commit>', 'Related commit hash')
+  .option('--notify', 'Send notification')
+  .option('--json', 'Output as JSON')
+  .action(async (proposalId: string, opts) => {
+    const { getFixProposalManager, ProposalWithHistory } = require('../domain/FixProposalManager');
+    const manager = getFixProposalManager();
+    const json = opts.json || false;
+
+    // Get proposal info for notification
+    const proposalInfo = manager.getProposal(proposalId);
+    if (!proposalInfo) {
+      if (json) {
+        console.log(JSON.stringify({ success: false, error: 'Proposal not found' }, null, 2));
+      } else {
+        console.error(`Proposal not found: ${proposalId}`);
+      }
+      process.exit(1);
+    }
+
+    const links = opts.ticket || opts.pr || opts.commit
+      ? { ticket: opts.ticket, pr: opts.pr, commit: opts.commit }
+      : undefined;
+
+    const result = manager.accept(proposalId, opts.actor, opts.reason, links);
+
+    if (!result.success) {
+      if (json) {
+        console.log(JSON.stringify({ success: false, error: result.error }, null, 2));
+      } else {
+        console.error(`Error: ${result.error}`);
+      }
+      process.exit(1);
+    }
+
+    // Send notification if requested
+    if (opts.notify) {
+      notifyFixProposalAccepted({
+        proposalId,
+        categoryId: proposalInfo.proposal.category_id,
+        priority: proposalInfo.proposal.priority,
+        title: proposalInfo.proposal.title,
+        actor: opts.actor,
+      }).catch(() => {});
+    }
+
+    if (json) {
+      console.log(JSON.stringify({
+        success: true,
+        action: 'accepted',
+        proposal_id: proposalId,
+        new_status: result.newStatus,
+        event: result.event,
+      }, null, 2));
+    } else {
+      console.log(`Proposal ${proposalId} accepted.`);
+      console.log(`  Actor: ${opts.actor}`);
+      console.log(`  Reason: ${opts.reason}`);
+      console.log(`  New status: ${result.newStatus}`);
+      if (links) {
+        const linkParts: string[] = [];
+        if (links.ticket) linkParts.push(`ticket=${links.ticket}`);
+        if (links.pr) linkParts.push(`PR=${links.pr}`);
+        if (links.commit) linkParts.push(`commit=${links.commit}`);
+        console.log(`  Links: ${linkParts.join(', ')}`);
+      }
+      console.log('');
+      console.log('Next: Implement the fix and then run:');
+      console.log(`  run_ops fixes-implement ${proposalId} --actor "..." --reason "..." --pr "..."`);
+    }
+  });
+
+// ============================================================
+// Subcommand: fixes-reject
+// ============================================================
+program
+  .command('fixes-reject')
+  .description('Reject a fix proposal')
+  .argument('<proposal_id>', 'Proposal ID')
+  .requiredOption('--actor <actor>', 'Name/ID of the person rejecting')
+  .requiredOption('--reason <reason>', 'Reason for rejecting')
+  .option('--notify', 'Send notification')
+  .option('--json', 'Output as JSON')
+  .action(async (proposalId: string, opts) => {
+    const { getFixProposalManager } = require('../domain/FixProposalManager');
+    const manager = getFixProposalManager();
+    const json = opts.json || false;
+
+    // Get proposal info for notification
+    const proposalInfo = manager.getProposal(proposalId);
+    if (!proposalInfo) {
+      if (json) {
+        console.log(JSON.stringify({ success: false, error: 'Proposal not found' }, null, 2));
+      } else {
+        console.error(`Proposal not found: ${proposalId}`);
+      }
+      process.exit(1);
+    }
+
+    const result = manager.reject(proposalId, opts.actor, opts.reason);
+
+    if (!result.success) {
+      if (json) {
+        console.log(JSON.stringify({ success: false, error: result.error }, null, 2));
+      } else {
+        console.error(`Error: ${result.error}`);
+      }
+      process.exit(1);
+    }
+
+    // Send notification if requested
+    if (opts.notify) {
+      notifyFixProposalRejected({
+        proposalId,
+        categoryId: proposalInfo.proposal.category_id,
+        priority: proposalInfo.proposal.priority,
+        title: proposalInfo.proposal.title,
+        actor: opts.actor,
+        reason: opts.reason,
+      }).catch(() => {});
+    }
+
+    if (json) {
+      console.log(JSON.stringify({
+        success: true,
+        action: 'rejected',
+        proposal_id: proposalId,
+        new_status: result.newStatus,
+        event: result.event,
+      }, null, 2));
+    } else {
+      console.log(`Proposal ${proposalId} rejected.`);
+      console.log(`  Actor: ${opts.actor}`);
+      console.log(`  Reason: ${opts.reason}`);
+      console.log(`  New status: ${result.newStatus}`);
+    }
+  });
+
+// ============================================================
+// Subcommand: fixes-implement
+// ============================================================
+program
+  .command('fixes-implement')
+  .description('Mark a fix proposal as implemented')
+  .argument('<proposal_id>', 'Proposal ID')
+  .requiredOption('--actor <actor>', 'Name/ID of the person implementing')
+  .requiredOption('--reason <reason>', 'Implementation notes/summary')
+  .option('--ticket <ticket>', 'Related ticket (e.g., JIRA-123)')
+  .option('--pr <pr>', 'Related PR number')
+  .option('--commit <commit>', 'Related commit hash')
+  .option('--notify', 'Send notification')
+  .option('--json', 'Output as JSON')
+  .action(async (proposalId: string, opts) => {
+    const { getFixProposalManager } = require('../domain/FixProposalManager');
+    const manager = getFixProposalManager();
+    const json = opts.json || false;
+
+    // Get proposal info for notification
+    const proposalInfo = manager.getProposal(proposalId);
+    if (!proposalInfo) {
+      if (json) {
+        console.log(JSON.stringify({ success: false, error: 'Proposal not found' }, null, 2));
+      } else {
+        console.error(`Proposal not found: ${proposalId}`);
+      }
+      process.exit(1);
+    }
+
+    const links = opts.ticket || opts.pr || opts.commit
+      ? { ticket: opts.ticket, pr: opts.pr, commit: opts.commit }
+      : undefined;
+
+    const result = manager.implement(proposalId, opts.actor, opts.reason, links);
+
+    if (!result.success) {
+      if (json) {
+        console.log(JSON.stringify({ success: false, error: result.error }, null, 2));
+      } else {
+        console.error(`Error: ${result.error}`);
+      }
+      process.exit(1);
+    }
+
+    // Send notification if requested
+    if (opts.notify) {
+      notifyFixProposalImplemented({
+        proposalId,
+        categoryId: proposalInfo.proposal.category_id,
+        priority: proposalInfo.proposal.priority,
+        title: proposalInfo.proposal.title,
+        actor: opts.actor,
+        links,
+      }).catch(() => {});
+    }
+
+    if (json) {
+      console.log(JSON.stringify({
+        success: true,
+        action: 'implemented',
+        proposal_id: proposalId,
+        new_status: result.newStatus,
+        event: result.event,
+      }, null, 2));
+    } else {
+      console.log(`Proposal ${proposalId} marked as implemented.`);
+      console.log(`  Actor: ${opts.actor}`);
+      console.log(`  Reason: ${opts.reason}`);
+      console.log(`  New status: ${result.newStatus}`);
+      if (links) {
+        const linkParts: string[] = [];
+        if (links.ticket) linkParts.push(`ticket=${links.ticket}`);
+        if (links.pr) linkParts.push(`PR=${links.pr}`);
+        if (links.commit) linkParts.push(`commit=${links.commit}`);
+        console.log(`  Links: ${linkParts.join(', ')}`);
+      }
+    }
+  });
+
+// ============================================================
+// Subcommand: fixes-note
+// ============================================================
+program
+  .command('fixes-note')
+  .description('Add a note to a fix proposal')
+  .argument('<proposal_id>', 'Proposal ID')
+  .requiredOption('--actor <actor>', 'Name/ID of the person adding the note')
+  .requiredOption('--note <note>', 'Note text')
+  .option('--json', 'Output as JSON')
+  .action(async (proposalId: string, opts) => {
+    const { getFixProposalManager } = require('../domain/FixProposalManager');
+    const manager = getFixProposalManager();
+    const json = opts.json || false;
+
+    const result = manager.addNote(proposalId, opts.actor, opts.note);
+
+    if (!result.success) {
+      if (json) {
+        console.log(JSON.stringify({ success: false, error: result.error }, null, 2));
+      } else {
+        console.error(`Error: ${result.error}`);
+      }
+      process.exit(1);
+    }
+
+    if (json) {
+      console.log(JSON.stringify({
+        success: true,
+        action: 'note_added',
+        proposal_id: proposalId,
+        event: result.event,
+      }, null, 2));
+    } else {
+      console.log(`Note added to proposal ${proposalId}.`);
+      console.log(`  Actor: ${opts.actor}`);
+      console.log(`  Note: ${opts.note}`);
     }
   });
 

@@ -20,7 +20,10 @@ export type NotificationEventType =
   | 'AUTO_SEND_BLOCKED'
   | 'SEND_APPROVED'
   | 'RAMP_LIMITED'
-  | 'INCIDENT_REPORT';
+  | 'INCIDENT_REPORT'
+  | 'FIX_PROPOSAL_ACCEPTED'
+  | 'FIX_PROPOSAL_REJECTED'
+  | 'FIX_PROPOSAL_IMPLEMENTED';
 
 /**
  * Notification severity levels

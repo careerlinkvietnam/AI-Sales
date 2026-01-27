@@ -391,4 +391,76 @@ export async function notifyRampLimited(params: {
   });
 }
 
+/**
+ * Notify fix proposal accepted
+ */
+export async function notifyFixProposalAccepted(params: {
+  proposalId: string;
+  categoryId: string;
+  priority: string;
+  title: string;
+  actor: string;
+}): Promise<void> {
+  await getNotificationRouter().sendNotification({
+    type: 'FIX_PROPOSAL_ACCEPTED',
+    severity: 'info',
+    reason: `[${params.priority}] ${params.title}`,
+    meta: {
+      proposal_id: params.proposalId,
+      category_id: params.categoryId,
+      priority: params.priority,
+      actor: params.actor,
+    },
+  });
+}
+
+/**
+ * Notify fix proposal rejected
+ */
+export async function notifyFixProposalRejected(params: {
+  proposalId: string;
+  categoryId: string;
+  priority: string;
+  title: string;
+  actor: string;
+  reason: string;
+}): Promise<void> {
+  await getNotificationRouter().sendNotification({
+    type: 'FIX_PROPOSAL_REJECTED',
+    severity: 'warn',
+    reason: `[${params.priority}] ${params.title} - ${params.reason}`,
+    meta: {
+      proposal_id: params.proposalId,
+      category_id: params.categoryId,
+      priority: params.priority,
+      actor: params.actor,
+    },
+  });
+}
+
+/**
+ * Notify fix proposal implemented
+ */
+export async function notifyFixProposalImplemented(params: {
+  proposalId: string;
+  categoryId: string;
+  priority: string;
+  title: string;
+  actor: string;
+  links?: { ticket?: string; pr?: string; commit?: string };
+}): Promise<void> {
+  await getNotificationRouter().sendNotification({
+    type: 'FIX_PROPOSAL_IMPLEMENTED',
+    severity: 'info',
+    reason: `[${params.priority}] ${params.title}`,
+    meta: {
+      proposal_id: params.proposalId,
+      category_id: params.categoryId,
+      priority: params.priority,
+      actor: params.actor,
+      links: params.links,
+    },
+  });
+}
+
 export default NotificationRouter;

@@ -2357,6 +2357,206 @@ Related Commands: run_ops report, run_ops safety, run_ops rollback
 
 同一カテゴリで直近7日以内に `proposed` または `accepted` ステータスの提案が存在する場合、新しい提案は生成されません。これにより重複した提案の氾濫を防ぎます。
 
+### 7.27 提案の状態遷移管理（P4-9）
+
+提案を承認・却下・実装済みに遷移させ、改善の実行管理を行います。
+
+> **重要**: 状態はイベントのリプレイで算出されます。提案本体は不変で、状態変更はイベントとして追記されます。
+
+#### 状態遷移図
+
+```
+proposed → ACCEPT → accepted → IMPLEMENT → implemented
+    ↓
+  REJECT
+    ↓
+ rejected
+```
+
+#### 状態の定義
+
+| ステータス | 説明 | 意味 |
+|------------|------|------|
+| `proposed` | 提案済み | レビュー待ち状態 |
+| `accepted` | 承認済み | 実装タスク化された状態（チケット作成済み等） |
+| `rejected` | 却下 | 対応不要と判断された状態（理由必須） |
+| `implemented` | 実装完了 | 対策が反映された状態（PR/commit等で確認可能） |
+
+#### 不正な遷移（禁止）
+
+- `rejected` → `ACCEPT` / `IMPLEMENT` : 却下済みの提案は承認・実装不可
+- `implemented` → `ACCEPT` / `REJECT` : 実装済みの提案は再承認・却下不可
+- `accepted` → `REJECT` : 承認済みの提案は却下不可（原則）
+- `proposed` → `IMPLEMENT` : 承認されていない提案は実装済みにできない
+
+#### fixes-accept コマンド（承認）
+
+```bash
+# 基本形
+npx ts-node src/cli/run_ops.ts fixes-accept <proposal_id> \
+  --actor "tanaka" \
+  --reason "対応が必要と判断"
+
+# チケット連携
+npx ts-node src/cli/run_ops.ts fixes-accept <proposal_id> \
+  --actor "tanaka" \
+  --reason "JIRAチケット作成" \
+  --ticket "JIRA-123"
+
+# 通知付き
+npx ts-node src/cli/run_ops.ts fixes-accept <proposal_id> \
+  --actor "tanaka" \
+  --reason "承認" \
+  --notify
+```
+
+#### fixes-reject コマンド（却下）
+
+```bash
+# 理由は必須
+npx ts-node src/cli/run_ops.ts fixes-reject <proposal_id> \
+  --actor "suzuki" \
+  --reason "現在の設定は意図的なもの（プロダクトチーム確認済み）"
+
+# 通知付き
+npx ts-node src/cli/run_ops.ts fixes-reject <proposal_id> \
+  --actor "suzuki" \
+  --reason "別の対策で対応済み" \
+  --notify
+```
+
+#### fixes-implement コマンド（実装完了）
+
+```bash
+# 基本形（承認済みの提案のみ可能）
+npx ts-node src/cli/run_ops.ts fixes-implement <proposal_id> \
+  --actor "yamada" \
+  --reason "auto_stopの閾値を調整"
+
+# PR/commit連携
+npx ts-node src/cli/run_ops.ts fixes-implement <proposal_id> \
+  --actor "yamada" \
+  --reason "閾値調整、本番反映済み" \
+  --pr "#456" \
+  --commit "abc123def"
+
+# チケット・PR・commit全部
+npx ts-node src/cli/run_ops.ts fixes-implement <proposal_id> \
+  --actor "yamada" \
+  --reason "対策完了" \
+  --ticket "JIRA-123" \
+  --pr "#456" \
+  --commit "abc123def" \
+  --notify
+```
+
+#### fixes-note コマンド（メモ追加）
+
+```bash
+# 状態を変えずにメモを追加（どの状態でも可能）
+npx ts-node src/cli/run_ops.ts fixes-note <proposal_id> \
+  --actor "tanaka" \
+  --note "週次ミーティングで議論、来週対応予定"
+```
+
+#### fixes-show（履歴付き詳細表示）
+
+```bash
+# イベント履歴を含む詳細表示
+npx ts-node src/cli/run_ops.ts fixes-show <proposal_id>
+
+# 出力例:
+# ID: FIX-20260127-a1b2c3d4
+# Status: IMPLEMENTED
+# ...
+# Event History:
+#   ✅ [2026-01-27T10:00:00Z] ACCEPT by tanaka
+#      対応が必要と判断
+#      Links: ticket=JIRA-123
+#   📝 [2026-01-28T09:00:00Z] NOTE by yamada
+#      実装開始
+#   ✨ [2026-01-29T14:00:00Z] IMPLEMENT by yamada
+#      閾値調整完了
+#      Links: PR=#456, commit=abc123def
+```
+
+#### fixes-list（状態フィルタ）
+
+```bash
+# 承認待ち（proposed）の提案一覧
+npx ts-node src/cli/run_ops.ts fixes-list --status proposed
+
+# 実装待ち（accepted）の提案一覧
+npx ts-node src/cli/run_ops.ts fixes-list --status accepted
+
+# 実装済み（implemented）の提案一覧
+npx ts-node src/cli/run_ops.ts fixes-list --status implemented
+```
+
+#### 週次運用ルーチン（完全版）
+
+```bash
+# 1. インシデントレポート確認
+npx ts-node src/cli/run_ops.ts incidents-report --since "$(date -v-7d +%Y-%m-%d)"
+
+# 2. 再発防止提案を生成
+npx ts-node src/cli/run_ops.ts fixes-propose --since "$(date -v-7d +%Y-%m-%d)"
+
+# 3. 提案一覧を確認（レビュー）
+npx ts-node src/cli/run_ops.ts fixes-list --status proposed
+
+# 4. 個別提案を確認
+npx ts-node src/cli/run_ops.ts fixes-show <proposal_id>
+
+# 5. 承認または却下
+npx ts-node src/cli/run_ops.ts fixes-accept <proposal_id> --actor "..." --reason "..."
+# または
+npx ts-node src/cli/run_ops.ts fixes-reject <proposal_id> --actor "..." --reason "..."
+
+# 6. 実装待ち提案を確認
+npx ts-node src/cli/run_ops.ts fixes-list --status accepted
+
+# 7. 実装完了を記録
+npx ts-node src/cli/run_ops.ts fixes-implement <proposal_id> \
+  --actor "..." --reason "..." --pr "..." --commit "..."
+```
+
+#### イベントデータ形式
+
+イベントは `data/fix_proposal_events.ndjson` に追記されます（PIIを含まない）。
+
+```json
+{
+  "event_id": "uuid-xxx",
+  "timestamp": "2026-01-27T10:00:00.000Z",
+  "proposal_id": "FIX-20260127-a1b2c3d4",
+  "action": "ACCEPT",
+  "actor": "tanaka",
+  "reason": "対応が必要と判断",
+  "links": {
+    "ticket": "JIRA-123"
+  }
+}
+```
+
+#### 通知イベント
+
+以下のイベントタイプで通知が送信されます（--notify オプション指定時）：
+
+| イベント | 説明 |
+|----------|------|
+| `FIX_PROPOSAL_ACCEPTED` | 提案が承認された |
+| `FIX_PROPOSAL_REJECTED` | 提案が却下された |
+| `FIX_PROPOSAL_IMPLEMENTED` | 提案が実装完了になった |
+
+#### 票が割れた場合の運用
+
+提案の承認・却下で意見が分かれた場合：
+
+1. **NOTE でディスカッション記録**: `fixes-note` で各意見を記録
+2. **理由を明確に**: 最終決定時は `--reason` に根拠を詳しく記載
+3. **エスカレーション**: P0提案で意見が割れた場合は上位者に判断を仰ぐ
+
 ### 7.17 推奨送信ワークフロー
 
 下書き作成から送信までの推奨フローです。
