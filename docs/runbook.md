@@ -3289,12 +3289,80 @@ npx ts-node src/cli/run_ops.ts approvals-pick --max-templates 5 --max-fixes 5 --
 npx ts-node src/cli/pick_approvals.ts --since 2026-01-20 --notify --json
 ```
 
+#### 承認候補インタラクティブ実行 (approvals-run)
+
+`approvals-pick` で抽出された候補を対話的に選択し、安全に実行するためのコマンドです。
+
+**重要な制約**:
+- PII禁止（宛先/本文/候補者詳細は表示しない）
+- 自動承認は行わない（必ず人間が選択）
+- デフォルトはdry-run（executeには `--execute` フラグが必須）
+- actor/reason は必須（監査ログに記録）
+
+```bash
+# dry-runモード（デフォルト、変更を行わない）
+npx ts-node src/cli/run_ops.ts approvals-run \
+  --actor "reviewer" \
+  --reason "weekly review 2026-01-27"
+
+# executeモード（実際に変更を実行）
+npx ts-node src/cli/run_ops.ts approvals-run \
+  --actor "reviewer" \
+  --reason "weekly review 2026-01-27" \
+  --execute
+
+# 期間指定
+npx ts-node src/cli/run_ops.ts approvals-run \
+  --since 2026-01-20 \
+  --actor "reviewer" \
+  --reason "backlog review"
+
+# JSON出力
+npx ts-node src/cli/run_ops.ts approvals-run \
+  --actor "reviewer" \
+  --reason "automated check" \
+  --json
+```
+
+**オプション**:
+| オプション | 説明 | 必須 |
+|------------|------|------|
+| `--actor <name>` | 実行者名/ID | ○ |
+| `--reason <reason>` | 実行理由 | ○ |
+| `--since <date>` | 期間開始日 | |
+| `--execute` | 実行モード有効化 | |
+| `--json` | JSON形式で出力 | |
+
+**対話UIフロー**:
+1. 候補を優先度順（P0→P1→P2）にリスト表示
+2. 各候補について approve/reject/accept/skip を選択
+3. dry-runモードでは実行計画を表示（実際の変更なし）
+4. executeモードでは選択に基づいて実行
+5. 結果サマリを表示
+
+**ガードレール**:
+- `min_sent未満` の候補は承認をブロック
+- `experiment paused` 中のテンプレートは承認をブロック
+- 1件のエラーで全体は止まらない（エラーを記録して続行）
+
+**実行結果**:
+```json
+{
+  "success": true,
+  "action": "fix_accept",
+  "candidateId": "fix-1",
+  "dryRun": false,
+  "message": "Fix proposal accepted successfully"
+}
+```
+
 #### 週次会議の手順
 
 週次改善会で効率的に意思決定を行うための推奨手順です。
 
 **重要**: 自動承認は行いません。すべての承認/却下は人間が判断します。
 
+**推奨フロー（対話UI使用）**:
 ```bash
 # 1. レビューパック生成（全体状況の把握）
 npx ts-node src/cli/run_ops.ts review-pack
@@ -3302,6 +3370,20 @@ npx ts-node src/cli/run_ops.ts review-pack
 # 2. 承認候補ピック（承認対象の絞り込み）
 npx ts-node src/cli/run_ops.ts approvals-pick
 
+# 3. 対話UIで確認（dry-run）
+npx ts-node src/cli/run_ops.ts approvals-run \
+  --actor "reviewer" \
+  --reason "weekly review $(date +%Y-%m-%d)"
+
+# 4. 問題なければ実行
+npx ts-node src/cli/run_ops.ts approvals-run \
+  --actor "reviewer" \
+  --reason "weekly review $(date +%Y-%m-%d)" \
+  --execute
+```
+
+**代替フロー（個別コマンド使用）**:
+```bash
 # 3. 承認/却下（修正提案）
 npx ts-node src/cli/run_ops.ts fixes-accept <proposal_id> --actor "reviewer" --reason "..."
 npx ts-node src/cli/run_ops.ts fixes-reject <proposal_id> --actor "reviewer" --reason "..."
@@ -3316,8 +3398,8 @@ npx ts-node src/cli/run_ops.ts promote --experiment "..."
 **会議アジェンダ例**:
 1. **状況確認**（5分）: review-packの確認、KPI・インシデント状況
 2. **承認候補レビュー**（10分）: approvals-pickの候補を優先度順に確認
-3. **意思決定**（10分）: 各候補の承認/却下/保留を決定
-4. **アクション実行**（5分）: 決定に基づきコマンド実行
+3. **対話UI確認**（5分）: approvals-runでdry-run確認
+4. **実行**（5分）: approvals-run --executeで一括実行
 5. **次週の計画**（5分）: 次週の重点項目を確認
 
 #### ヘルスチェック (health)
@@ -3567,3 +3649,6 @@ npx ts-node src/cli/run_ops.ts health --json --notify
 | 2026-01-27 | P4-11: 詰まり防止・肥大化対策 - ReapStaleQueueJobs, NdjsonCompactor, in_progress_started_at, send-queue reap, data compact/status サブコマンド, SEND_QUEUE_REAPED 通知 |
 | 2026-01-27 | P4-12: 日次/週次自動運用 - run_ops daily/weekly/health プリセット, config/ops_schedule.json, generate_scheduler_templates CLI, cron/systemdテンプレート |
 | 2026-01-27 | P4-13: 運用サマリ通知 - OpsSummaryBuilder, OPS_DAILY_SUMMARY/WEEKLY_SUMMARY/HEALTH_SUMMARY イベント, health --notify, 集約通知 |
+| 2026-01-27 | P4-14: 週次レビューパック生成 - ReviewPackBuilder, run_ops review-pack サブコマンド, review_pack_enabled/notify 設定 |
+| 2026-01-27 | P4-15: 承認候補ピッカー - ApprovalCandidatePicker, run_ops approvals-pick サブコマンド, approvals_pick_enabled/notify 設定 |
+| 2026-01-27 | P4-16: 承認候補インタラクティブ実行 - InteractiveRunner, run_ops approvals-run サブコマンド, dry-run/executeモード, ガードレール |

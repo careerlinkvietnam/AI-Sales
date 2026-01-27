@@ -47,6 +47,7 @@ import {
 import { getOpsSummaryBuilder, HealthInput, StepResult } from '../domain/OpsSummaryBuilder';
 import { getReviewPackBuilder, ReviewPack } from '../domain/ReviewPackBuilder';
 import { getApprovalCandidatePicker, ApprovalCandidates } from '../domain/ApprovalCandidatePicker';
+import { runInteractiveSession, ExecutionContext, ExecutionResult } from './interactive_runner';
 import { getIncidentManager, IncidentManager } from '../domain/IncidentManager';
 import { getResumeGate } from '../domain/ResumeGate';
 
@@ -2239,6 +2240,7 @@ export interface OpsScheduleConfig {
     review_pack_notify: boolean;
     approvals_pick_enabled: boolean;
     approvals_pick_notify: boolean;
+    approvals_run_hint: boolean;
   };
   health: {
     window_days: number;
@@ -2269,6 +2271,7 @@ export function loadOpsScheduleConfig(customConfigPath?: string): OpsScheduleCon
       review_pack_notify: false,
       approvals_pick_enabled: false,
       approvals_pick_notify: false,
+      approvals_run_hint: true,
     },
     health: {
       window_days: 3,
@@ -2914,6 +2917,15 @@ program
         if (!execute) {
           console.log('This was a DRY RUN. Use --execute to perform operations.');
         }
+
+        // Show approvals-run hint if enabled
+        if (config.weekly.approvals_run_hint) {
+          console.log('');
+          console.log('Next step: Review and execute approval candidates interactively:');
+          console.log(`  npx ts-node src/cli/run_ops.ts approvals-run --actor "${process.env.USER || 'operator'}" --reason "weekly review"`);
+          console.log('');
+          console.log('Add --execute to enable execution mode (default is dry-run).');
+        }
       }
     } catch (error) {
       results.success = false;
@@ -3442,6 +3454,97 @@ program
         console.log(JSON.stringify({ success: false, error: (error as Error).message }, null, 2));
       } else {
         console.error('Error picking approvals:', (error as Error).message);
+      }
+      process.exit(1);
+    }
+  });
+
+// ============================================================
+// Subcommand: approvals-run
+// ============================================================
+program
+  .command('approvals-run')
+  .description('Interactive runner for approval candidates (dry-run by default)')
+  .option('--since <date>', 'Start date (YYYY-MM-DD, default: 7 days ago)')
+  .option('--execute', 'Enable execution mode (default is dry-run only)')
+  .requiredOption('--actor <actor>', 'Name/ID of the person executing')
+  .requiredOption('--reason <reason>', 'Reason for the actions')
+  .option('--json', 'Output results as JSON')
+  .action(async (opts) => {
+    const json = opts.json || false;
+    const executeMode = opts.execute || false;
+
+    if (!json) {
+      console.log('');
+      console.log('='.repeat(70));
+      console.log('Approval Candidates Interactive Runner');
+      console.log('='.repeat(70));
+      console.log('');
+      console.log(`Mode: ${executeMode ? 'EXECUTE' : 'DRY-RUN (use --execute to enable execution)'}`);
+      console.log(`Actor: ${opts.actor}`);
+      console.log(`Reason: ${opts.reason}`);
+      console.log('');
+      console.log('NOTE: This tool does NOT perform automatic approvals.');
+      console.log('      You must select each action manually.');
+      console.log('');
+    }
+
+    try {
+      // Pick candidates
+      const picker = getApprovalCandidatePicker();
+      const candidates = picker.pick({
+        since: opts.since,
+        maxTemplates: 3,
+        maxFixes: 3,
+        maxOps: 3,
+      });
+
+      if (candidates.summary.totalCandidates === 0) {
+        if (json) {
+          console.log(JSON.stringify({
+            success: true,
+            message: 'No candidates found',
+            results: [],
+          }, null, 2));
+        } else {
+          console.log('No approval candidates found.');
+        }
+        return;
+      }
+
+      // Create execution context
+      const context: ExecutionContext = {
+        actor: opts.actor,
+        reason: opts.reason,
+        source: 'interactive',
+        executeMode,
+      };
+
+      // Run interactive session
+      const results = await runInteractiveSession(candidates, context);
+
+      if (json) {
+        console.log(JSON.stringify({
+          success: true,
+          mode: executeMode ? 'execute' : 'dry-run',
+          actor: opts.actor,
+          results: results.map(r => ({
+            candidateId: r.candidateId,
+            action: r.action,
+            success: r.success,
+            dryRun: r.dryRun,
+            message: r.message,
+            error: r.error,
+            blockedByGuardrails: r.blockedByGuardrails,
+          })),
+        }, null, 2));
+      }
+
+    } catch (error) {
+      if (json) {
+        console.log(JSON.stringify({ success: false, error: (error as Error).message }, null, 2));
+      } else {
+        console.error('Error running interactive session:', (error as Error).message);
       }
       process.exit(1);
     }

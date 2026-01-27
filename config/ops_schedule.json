@@ -19,7 +19,8 @@
     "review_pack_notify": false,
     "approvals_pick_enabled": false,
     "approvals_pick_notify": false,
-    "comment": "compact_execute=false は最初は手動確認推奨。review_pack_enabled/approvals_pick_enabled=true でweekly終了時に各レポート生成。"
+    "approvals_run_hint": true,
+    "comment": "compact_execute=false は最初は手動確認推奨。review_pack_enabled/approvals_pick_enabled=true でweekly終了時に各レポート生成。approvals_run_hint=true で対話UI案内表示。"
   },
   "health": {
     "window_days": 3,
