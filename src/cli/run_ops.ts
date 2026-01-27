@@ -1928,6 +1928,194 @@ program
     }
   });
 
+// ============================================================
+// Subcommand: send-queue (with subactions)
+// ============================================================
+program
+  .command('send-queue')
+  .description('Manage send queue')
+  .argument('<action>', 'Action: status, process, dead-letter, retry')
+  .argument('[job_id]', 'Job ID (for retry, dead-letter show)')
+  .option('--max-jobs <n>', 'Maximum jobs to process', '10')
+  .option('--execute', 'Actually process/send (default is dry-run)')
+  .option('--actor <actor>', 'Actor name (for retry)')
+  .option('--reason <reason>', 'Reason (for retry)')
+  .option('--json', 'Output as JSON')
+  .action(async (action: string, jobId: string | undefined, opts) => {
+    const { getSendQueueManager } = require('../domain/SendQueueManager');
+    const manager = getSendQueueManager();
+    const json = opts.json || false;
+
+    switch (action) {
+      case 'status': {
+        const counts = manager.getStatusCounts();
+        const total = Object.values(counts).reduce((a: number, b: number) => a + b, 0);
+
+        if (json) {
+          console.log(JSON.stringify({
+            success: true,
+            total,
+            counts,
+          }, null, 2));
+        } else {
+          console.log('='.repeat(60));
+          console.log('Send Queue Status');
+          console.log('='.repeat(60));
+          console.log('');
+          console.log(`Total: ${total}`);
+          console.log(`  Queued: ${counts.queued}`);
+          console.log(`  In Progress: ${counts.in_progress}`);
+          console.log(`  Sent: ${counts.sent}`);
+          console.log(`  Failed: ${counts.failed}`);
+          console.log(`  Dead Letter: ${counts.dead_letter}`);
+          console.log(`  Cancelled: ${counts.cancelled}`);
+        }
+        break;
+      }
+
+      case 'process': {
+        const maxJobs = parseInt(opts.maxJobs || '10', 10);
+        const execute = opts.execute || false;
+
+        const args: string[] = [];
+        args.push('--max-jobs', String(maxJobs));
+        if (execute) args.push('--execute');
+        if (json) args.push('--json');
+
+        await execCli('process_send_queue', args);
+        break;
+      }
+
+      case 'dead-letter': {
+        // If no job_id, list dead letters
+        if (!jobId || jobId === 'list') {
+          const jobs = manager.getDeadLetterJobs();
+
+          if (json) {
+            console.log(JSON.stringify({
+              success: true,
+              count: jobs.length,
+              jobs: jobs.map((j: any) => ({
+                job_id: j.job_id,
+                tracking_id: j.tracking_id,
+                to_domain: j.to_domain,
+                template_id: j.template_id,
+                attempts: j.attempts,
+                last_error_code: j.last_error_code,
+                created_at: j.created_at,
+              })),
+            }, null, 2));
+          } else {
+            console.log('='.repeat(60));
+            console.log('Dead Letter Queue');
+            console.log('='.repeat(60));
+            console.log('');
+
+            if (jobs.length === 0) {
+              console.log('No dead letter jobs.');
+            } else {
+              for (const job of jobs) {
+                console.log(`💀 ${job.job_id}`);
+                console.log(`  Tracking: ${job.tracking_id}`);
+                console.log(`  Domain: ${job.to_domain}`);
+                console.log(`  Attempts: ${job.attempts}`);
+                console.log(`  Error: ${job.last_error_code || 'unknown'}`);
+                console.log(`  Created: ${job.created_at}`);
+                console.log('');
+              }
+              console.log(`Total: ${jobs.length}`);
+              console.log('');
+              console.log('To retry: run_ops send-queue retry <job_id> --actor "..." --reason "..."');
+            }
+          }
+        } else if (jobId === 'show') {
+          console.error('Usage: run_ops send-queue dead-letter show <job_id>');
+          process.exit(1);
+        } else {
+          // Show specific dead letter
+          const job = manager.getJob(jobId);
+          if (!job || job.status !== 'dead_letter') {
+            if (json) {
+              console.log(JSON.stringify({ success: false, error: 'Dead letter job not found' }, null, 2));
+            } else {
+              console.error(`Dead letter job not found: ${jobId}`);
+            }
+            process.exit(1);
+          }
+
+          if (json) {
+            console.log(JSON.stringify({ success: true, job }, null, 2));
+          } else {
+            console.log('='.repeat(60));
+            console.log('Dead Letter Job Details');
+            console.log('='.repeat(60));
+            console.log('');
+            console.log(`Job ID: ${job.job_id}`);
+            console.log(`Status: ${job.status}`);
+            console.log(`Draft ID: ${job.draft_id}`);
+            console.log(`Tracking ID: ${job.tracking_id}`);
+            console.log(`Company ID: ${job.company_id}`);
+            console.log(`Template ID: ${job.template_id}`);
+            console.log(`Domain: ${job.to_domain}`);
+            console.log(`Attempts: ${job.attempts}`);
+            console.log(`Error Code: ${job.last_error_code || 'N/A'}`);
+            console.log(`Created: ${job.created_at}`);
+            console.log(`Updated: ${job.last_updated_at}`);
+            console.log('');
+            console.log('To retry: run_ops send-queue retry ' + job.job_id + ' --actor "..." --reason "..."');
+          }
+        }
+        break;
+      }
+
+      case 'retry': {
+        if (!jobId) {
+          console.error('Error: job_id is required for retry');
+          process.exit(1);
+        }
+        if (!opts.actor) {
+          console.error('Error: --actor is required for retry');
+          process.exit(1);
+        }
+        if (!opts.reason) {
+          console.error('Error: --reason is required for retry');
+          process.exit(1);
+        }
+
+        const result = manager.retryDeadLetter(jobId, opts.actor, opts.reason);
+
+        if (!result.success) {
+          if (json) {
+            console.log(JSON.stringify({ success: false, error: result.error }, null, 2));
+          } else {
+            console.error(`Error: ${result.error}`);
+          }
+          process.exit(1);
+        }
+
+        if (json) {
+          console.log(JSON.stringify({
+            success: true,
+            action: 'retried',
+            job_id: jobId,
+          }, null, 2));
+        } else {
+          console.log(`Job ${jobId} re-queued for retry.`);
+          console.log(`  Actor: ${opts.actor}`);
+          console.log(`  Reason: ${opts.reason}`);
+          console.log('');
+          console.log('Process the queue: run_ops send-queue process --execute');
+        }
+        break;
+      }
+
+      default:
+        console.error(`Unknown action: ${action}`);
+        console.error('Valid actions: status, process, dead-letter, retry');
+        process.exit(1);
+    }
+  });
+
 // Parse and run
 program.parse();
 

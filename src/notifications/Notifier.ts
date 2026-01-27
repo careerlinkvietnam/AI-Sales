@@ -23,7 +23,9 @@ export type NotificationEventType =
   | 'INCIDENT_REPORT'
   | 'FIX_PROPOSAL_ACCEPTED'
   | 'FIX_PROPOSAL_REJECTED'
-  | 'FIX_PROPOSAL_IMPLEMENTED';
+  | 'FIX_PROPOSAL_IMPLEMENTED'
+  | 'SEND_QUEUE_DEAD_LETTER'
+  | 'SEND_QUEUE_BACKOFF';
 
 /**
  * Notification severity levels

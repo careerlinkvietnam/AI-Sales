@@ -38,4 +38,9 @@ export {
   notifyAutoSendBlocked,
   notifySendApproved,
   notifyRampLimited,
+  notifyFixProposalAccepted,
+  notifyFixProposalRejected,
+  notifyFixProposalImplemented,
+  notifySendQueueDeadLetter,
+  notifySendQueueBackoff,
 } from './NotificationRouter';

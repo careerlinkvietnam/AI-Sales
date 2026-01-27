@@ -2,7 +2,7 @@
 /**
  * Send Draft CLI
  *
- * Sends a previously created Gmail draft with strict safety controls.
+ * Queues or sends a previously created Gmail draft with strict safety controls.
  *
  * 必須引数:
  * - --draft-id: Gmail下書きID
@@ -16,8 +16,14 @@
  * - --ab-variant: A/Bバリアント（metrics記録用）
  * - --subject: 件名（PreSendGateチェック用）
  * - --body: 本文（PreSendGateチェック用）
+ * - --execute: 即時送信（デフォルトはenqueueのみ）
  * - --dry-run: 送信せずに判定のみ表示
  * - --json: JSON出力
+ *
+ * 動作:
+ * - デフォルト: キューに追加（job_idを返す）
+ * - --execute: 従来通り即時送信
+ * - --dry-run: チェックのみ実行
  *
  * 安全性:
  * - ENABLE_AUTO_SEND=true かつ KILL_SWITCH=false の場合のみ送信可能
@@ -35,6 +41,8 @@ import { getApprovalTokenManager } from '../domain/ApprovalToken';
 import { getMetricsStore, SendBlockedReason } from '../data/MetricsStore';
 import { getDraftRegistry } from '../data/DraftRegistry';
 import { getRampPolicy } from '../domain/RampPolicy';
+import { getSendQueueManager } from '../domain/SendQueueManager';
+import { SendQueueStore } from '../data/SendQueueStore';
 import {
   notifyAutoSendSuccess,
   notifyAutoSendBlocked,
@@ -51,6 +59,7 @@ interface SendDraftOptions {
   abVariant?: 'A' | 'B';
   subject?: string;
   body?: string;
+  execute?: boolean;
   dryRun?: boolean;
   json?: boolean;
 }
@@ -58,8 +67,10 @@ interface SendDraftOptions {
 interface SendResult {
   success: boolean;
   sent: boolean;
+  queued: boolean;
   dryRun: boolean;
   draftId: string;
+  jobId?: string;
   messageId?: string;
   threadId?: string;
   blocked?: boolean;
@@ -133,6 +144,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     return {
       success: false,
       sent: false,
+      queued: false,
       dryRun: options.dryRun || false,
       draftId: options.draftId,
       blocked: true,
@@ -167,6 +179,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     return {
       success: false,
       sent: false,
+      queued: false,
       dryRun: options.dryRun || false,
       draftId: options.draftId,
       blocked: true,
@@ -203,6 +216,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
       return {
         success: false,
         sent: false,
+        queued: false,
         dryRun: options.dryRun || false,
         draftId: options.draftId,
         blocked: true,
@@ -235,6 +249,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
       return {
         success: false,
         sent: false,
+        queued: false,
         dryRun: options.dryRun || false,
         draftId: options.draftId,
         blocked: true,
@@ -270,6 +285,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     return {
       success: false,
       sent: false,
+      queued: false,
       dryRun: options.dryRun || false,
       draftId: options.draftId,
       blocked: true,
@@ -304,6 +320,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     return {
       success: false,
       sent: false,
+      queued: false,
       dryRun: options.dryRun || false,
       draftId: options.draftId,
       blocked: true,
@@ -337,6 +354,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     return {
       success: false,
       sent: false,
+      queued: false,
       dryRun: options.dryRun || false,
       draftId: options.draftId,
       blocked: true,
@@ -377,6 +395,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
       return {
         success: false,
         sent: false,
+        queued: false,
         dryRun: options.dryRun || false,
         draftId: options.draftId,
         blocked: true,
@@ -387,18 +406,58 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     }
   }
 
-  // Dry run: don't actually send
+  // Dry run: don't actually send or enqueue
   if (options.dryRun) {
     return {
       success: true,
       sent: false,
+      queued: false,
       dryRun: true,
       draftId: options.draftId,
-      details: 'Dry run - all checks passed, would send',
+      details: 'Dry run - all checks passed, would ' + (options.execute ? 'send' : 'enqueue'),
     };
   }
 
-  // Actually send the draft
+  // Default behavior: enqueue (unless --execute is specified)
+  if (!options.execute) {
+    const queueManager = getSendQueueManager();
+    const approvalFingerprint = SendQueueStore.createApprovalFingerprint(options.approvalToken);
+
+    const enqueueResult = queueManager.enqueue({
+      draft_id: options.draftId,
+      tracking_id: trackingId,
+      company_id: companyId,
+      template_id: templateId,
+      ab_variant: abVariant,
+      to_domain: recipientDomain,
+      approval_fingerprint: approvalFingerprint,
+    });
+
+    if (!enqueueResult.success) {
+      return {
+        success: false,
+        sent: false,
+        queued: false,
+        dryRun: false,
+        draftId: options.draftId,
+        blocked: true,
+        reason: 'gate_failed',
+        details: enqueueResult.error || 'Failed to enqueue',
+      };
+    }
+
+    return {
+      success: true,
+      sent: false,
+      queued: true,
+      dryRun: false,
+      draftId: options.draftId,
+      jobId: enqueueResult.job_id,
+      details: enqueueResult.already_queued ? 'Already in queue' : 'Queued for sending',
+    };
+  }
+
+  // --execute: Actually send the draft immediately
   try {
     const gmailClient = new GmailClient();
     const result = await gmailClient.sendDraft(options.draftId);
@@ -426,6 +485,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     return {
       success: true,
       sent: true,
+      queued: false,
       dryRun: false,
       draftId: options.draftId,
       messageId: result.messageId,
@@ -458,6 +518,7 @@ async function sendDraft(options: SendDraftOptions): Promise<SendResult> {
     return {
       success: false,
       sent: false,
+      queued: false,
       dryRun: false,
       draftId: options.draftId,
       blocked: true,
@@ -475,7 +536,7 @@ async function main(): Promise<void> {
 
   program
     .name('send_draft')
-    .description('Send a Gmail draft with safety controls')
+    .description('Queue or send a Gmail draft with safety controls')
     .requiredOption('--draft-id <id>', 'Gmail draft ID')
     .requiredOption('--to <email>', 'Recipient email address')
     .requiredOption('--approval-token <token>', 'Approval token')
@@ -485,7 +546,8 @@ async function main(): Promise<void> {
     .option('--ab-variant <variant>', 'A/B variant (A or B)')
     .option('--subject <subject>', 'Email subject for PreSendGate check')
     .option('--body <body>', 'Email body for PreSendGate check')
-    .option('--dry-run', 'Check without sending')
+    .option('--execute', 'Immediately send (default is enqueue only)')
+    .option('--dry-run', 'Check without sending or enqueueing')
     .option('--json', 'Output JSON')
     .parse(process.argv);
 
@@ -501,6 +563,7 @@ async function main(): Promise<void> {
     abVariant: opts.abVariant as 'A' | 'B' | undefined,
     subject: opts.subject,
     body: opts.body,
+    execute: opts.execute,
     dryRun: opts.dryRun,
     json: opts.json,
   };
@@ -515,9 +578,17 @@ async function main(): Promise<void> {
         if (result.dryRun) {
           console.log('Dry run: All checks passed');
           console.log(`  Draft ID: ${result.draftId}`);
-          console.log('  Would send if --dry-run was not specified');
-        } else {
-          console.log('Send successful!');
+          console.log(`  Would ${opts.execute ? 'send' : 'enqueue'} if --dry-run was not specified`);
+        } else if (result.queued) {
+          console.log('Queued for sending!');
+          console.log(`  Draft ID: ${result.draftId}`);
+          console.log(`  Job ID: ${result.jobId}`);
+          console.log(`  ${result.details || ''}`);
+          console.log('');
+          console.log('To process the queue:');
+          console.log('  npx ts-node src/cli/run_ops.ts send-queue process --execute');
+        } else if (result.sent) {
+          console.log('Sent successfully!');
           console.log(`  Draft ID: ${result.draftId}`);
           console.log(`  Message ID: ${result.messageId}`);
           console.log(`  Thread ID: ${result.threadId}`);

@@ -463,4 +463,52 @@ export async function notifyFixProposalImplemented(params: {
   });
 }
 
+/**
+ * Notify send queue dead letter
+ */
+export async function notifySendQueueDeadLetter(params: {
+  jobId: string;
+  errorCode: string;
+  attempts: number;
+  toDomain: string;
+  templateId?: string;
+  trackingId?: string;
+}): Promise<void> {
+  await getNotificationRouter().sendNotification({
+    type: 'SEND_QUEUE_DEAD_LETTER',
+    severity: 'error',
+    reason: `Job ${params.jobId} moved to dead letter after ${params.attempts} attempts`,
+    templateId: params.templateId,
+    trackingId: params.trackingId,
+    meta: {
+      job_id: params.jobId,
+      error_code: params.errorCode,
+      attempts: params.attempts,
+      to_domain: params.toDomain,
+    },
+  });
+}
+
+/**
+ * Notify send queue backoff
+ */
+export async function notifySendQueueBackoff(params: {
+  jobId: string;
+  errorCode: string;
+  nextAttemptAt: string;
+  attempts: number;
+}): Promise<void> {
+  await getNotificationRouter().sendNotification({
+    type: 'SEND_QUEUE_BACKOFF',
+    severity: 'warn',
+    reason: `Job ${params.jobId} backed off (attempt ${params.attempts})`,
+    meta: {
+      job_id: params.jobId,
+      error_code: params.errorCode,
+      next_attempt_at: params.nextAttemptAt,
+      attempts: params.attempts,
+    },
+  });
+}
+
 export default NotificationRouter;

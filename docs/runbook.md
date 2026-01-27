@@ -2655,6 +2655,199 @@ npx ts-node src/cli/run_ops.ts approve-send \
 | `rollback_recommended` | 実験を終了し、前のテンプレートに戻す検討 |
 | `review_recommended` | 詳細を確認し、必要に応じて対処 |
 
+### 7.28 送信キュー（SendQueue）
+
+Gmail API の一時障害（429/5xx）への耐性を高めるため、送信をキューイング＋バックオフで安定化します。
+
+#### 設計原則
+
+1. **デフォルトはキュー追加**: `send_draft` CLI はデフォルトでキューに追加（`--execute` で即時送信）
+2. **冪等性**: 同じ draft の二重送信を防止
+3. **リトライ可能エラー**: 429/5xx は指数バックオフでリトライ
+4. **dead_letter**: max_attempts 超過またはauth/policyエラーは人間確認用に分離
+5. **PII禁止**: キューにメールアドレス・本文は保存しない（`to_domain` のみ）
+
+#### データファイル（data/send_queue.ndjson）
+
+```json
+{
+  "job_id": "SND-abc123def456",
+  "created_at": "2026-01-27T10:00:00.000Z",
+  "status": "queued",
+  "draft_id": "draft-xxx",
+  "tracking_id": "track-abc",
+  "company_id": "company-xyz",
+  "template_id": "template-001",
+  "ab_variant": "A",
+  "to_domain": "example.com",
+  "approval_fingerprint": "a1b2c3d4",
+  "attempts": 0,
+  "next_attempt_at": "2026-01-27T10:00:00.000Z",
+  "last_updated_at": "2026-01-27T10:00:00.000Z"
+}
+```
+
+**フィールド説明**:
+
+| フィールド | 説明 |
+|------------|------|
+| `job_id` | ジョブID（SND-で始まる） |
+| `status` | `queued`, `in_progress`, `sent`, `failed`, `dead_letter`, `cancelled` |
+| `draft_id` | Gmail下書きID |
+| `tracking_id` | トラッキングID |
+| `to_domain` | 送信先ドメイン（PIIを含まない） |
+| `approval_fingerprint` | 承認トークンのSHA256ハッシュ先頭8文字 |
+| `attempts` | 試行回数 |
+| `next_attempt_at` | 次回試行予定時刻 |
+| `last_error_code` | 最後のエラーコード |
+
+#### ジョブステータス
+
+| ステータス | 説明 | 処理 |
+|------------|------|------|
+| `queued` | キュー待機中 | process_send_queue で処理 |
+| `in_progress` | 処理中 | リース中 |
+| `sent` | 送信完了 | 終了状態 |
+| `failed` | 失敗（リトライ不可） | policy/gate 問題 |
+| `dead_letter` | 人間確認必要 | max_attempts超過、auth問題 |
+| `cancelled` | キャンセル済み | 手動キャンセル |
+
+#### エラー分類とリトライ
+
+| エラーコード | HTTP | Retryable | Dead Letter |
+|--------------|------|-----------|-------------|
+| `gmail_429` | 429 | Yes | max attempts時 |
+| `gmail_5xx` | 500-599 | Yes | max attempts時 |
+| `gmail_400` | 400 | No | No |
+| `auth` | 401/403 | No | Yes |
+| `policy` | - | No | No |
+| `gate` | - | No | No |
+| `not_found` | 404 | No | Yes |
+| `unknown` | - | Yes | max attempts時 |
+
+#### バックオフ設定（config/retry_policy.json）
+
+```json
+{
+  "maxAttempts": 5,
+  "baseBackoffSeconds": 60,
+  "maxBackoffSeconds": 3600,
+  "backoffMultiplier": 3,
+  "jitterFactor": 0.2
+}
+```
+
+**バックオフ計算例**:
+- Attempt 1失敗: 60秒後にリトライ
+- Attempt 2失敗: 180秒後にリトライ
+- Attempt 3失敗: 540秒後にリトライ
+- Attempt 4失敗: 1620秒後にリトライ
+- Attempt 5失敗: dead_letter に移行
+
+#### send_draft CLI の変更
+
+```bash
+# デフォルト: キューに追加
+npx ts-node src/cli/send_draft.ts \
+  --draft-id "draft-123" \
+  --to "user@example.com" \
+  --approval-token "..."
+# → queued: job_id=SND-xxx
+
+# 即時送信（--execute）
+npx ts-node src/cli/send_draft.ts \
+  --draft-id "draft-123" \
+  --to "user@example.com" \
+  --approval-token "..." \
+  --execute
+# → sent: message_id=xxx
+```
+
+#### process_send_queue CLI
+
+キューを処理するワーカーです。
+
+```bash
+# ドライラン（送信しない）
+npx ts-node src/cli/process_send_queue.ts --max-jobs 10
+
+# 実際に送信
+npx ts-node src/cli/process_send_queue.ts --max-jobs 10 --execute
+
+# JSON出力
+npx ts-node src/cli/process_send_queue.ts --max-jobs 10 --execute --json
+```
+
+**オプション**:
+
+| オプション | 説明 | デフォルト |
+|------------|------|-----------|
+| `--max-jobs <n>` | 最大処理件数 | 10 |
+| `--execute` | 実際に送信 | - |
+| `--json` | JSON出力 | - |
+
+#### run_ops send-queue サブコマンド
+
+```bash
+# キュー状態確認
+npx ts-node src/cli/run_ops.ts send-queue status
+
+# キュー処理（ドライラン）
+npx ts-node src/cli/run_ops.ts send-queue process --max-jobs 5
+
+# キュー処理（実行）
+npx ts-node src/cli/run_ops.ts send-queue process --max-jobs 5 --execute
+
+# dead letter 一覧
+npx ts-node src/cli/run_ops.ts send-queue dead-letter
+
+# dead letter 詳細
+npx ts-node src/cli/run_ops.ts send-queue dead-letter --job-id SND-xxx
+
+# dead letter リトライ
+npx ts-node src/cli/run_ops.ts send-queue retry --job-id SND-xxx --actor "operator" --reason "Auth fixed"
+```
+
+#### 通知イベント
+
+| イベント | 重要度 | 発生タイミング |
+|----------|--------|----------------|
+| `SEND_QUEUE_DEAD_LETTER` | error | dead_letterに移行時 |
+| `SEND_QUEUE_BACKOFF` | warn | バックオフ開始時 |
+
+#### 日次運用ルーチン
+
+```bash
+# 1. キュー状態確認
+npx ts-node src/cli/run_ops.ts send-queue status
+
+# 2. キュー処理（10件まで）
+npx ts-node src/cli/run_ops.ts send-queue process --max-jobs 10 --execute
+
+# 3. dead letter 確認
+npx ts-node src/cli/run_ops.ts send-queue dead-letter
+
+# 4. 問題がある場合は調査して retry
+npx ts-node src/cli/run_ops.ts send-queue retry --job-id SND-xxx --actor "..." --reason "..."
+```
+
+#### cronジョブ例
+
+```cron
+# 5分ごとにキュー処理
+*/5 * * * * cd /path/to/AI-Sales && npx ts-node src/cli/process_send_queue.ts --max-jobs 5 --execute >> /var/log/send_queue.log 2>&1
+```
+
+#### dead letter の対処
+
+1. **エラー確認**: `send-queue dead-letter --job-id SND-xxx` で詳細確認
+2. **原因特定**:
+   - `auth`: 認証情報の期限切れ → 認証再設定
+   - `gmail_429`: 継続的なレート制限 → 送信量削減
+   - `not_found`: 下書き削除 → キャンセル
+3. **対処実行**: 原因解決後、`send-queue retry` で再キュー
+4. **キャンセル**: 対処不能な場合は手動でキャンセル
+
 ---
 
 ## 8. 運用ルーチン
@@ -2823,3 +3016,4 @@ npx ts-node src/cli/run_ops.ts rollback \
 | 2026-01-26 | P4-3: 緊急停止とロールバック - RuntimeKillSwitch, stop-send/resume-send/stop-status/rollback サブコマンド, rollback_experiment CLI, OPS_STOP_SEND/OPS_RESUME_SEND/OPS_ROLLBACK メトリクス |
 | 2026-01-26 | P4-4: 段階リリースと自動停止 - RampPolicy, AutoStopPolicy, AutoStopJob, ramp-status/auto-stop サブコマンド, ramp_limited ブロック理由追加 |
 | 2026-01-26 | P4-5: 運用イベント通知 - WebhookNotifier, NotificationRouter, notify-test サブコマンド, PII-free通知設計 |
+| 2026-01-27 | P4-10: 送信キュー - SendQueueStore, RetryPolicy, SendQueueManager, process_send_queue CLI, send_draft enqueue デフォルト化, send-queue サブコマンド |

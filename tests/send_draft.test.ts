@@ -9,11 +9,14 @@ import { resetSendPolicy } from '../src/domain/SendPolicy';
 import { resetMetricsStore } from '../src/data/MetricsStore';
 import { DraftRegistry, resetDraftRegistry } from '../src/data/DraftRegistry';
 import { ApprovalTokenManager } from '../src/domain/ApprovalToken';
+import { resetSendQueueStore } from '../src/data/SendQueueStore';
+import { resetSendQueueManager } from '../src/domain/SendQueueManager';
 
 describe('send_draft CLI', () => {
   const testDir = path.join(__dirname, 'tmp_send_draft_test');
   const metricsPath = path.join(testDir, 'metrics.ndjson');
   const draftsPath = path.join('data', 'drafts.ndjson');
+  const queuePath = path.join(testDir, 'send_queue.ndjson');
   let tokenManager: ApprovalTokenManager;
   let validToken: string;
   let draftRegistry: DraftRegistry;
@@ -26,6 +29,9 @@ describe('send_draft CLI', () => {
     // Initialize empty metrics file
     fs.writeFileSync(metricsPath, '');
 
+    // Initialize empty queue file
+    fs.writeFileSync(queuePath, '');
+
     // Ensure data directory exists for draft registry
     if (!fs.existsSync('data')) {
       fs.mkdirSync('data', { recursive: true });
@@ -36,11 +42,14 @@ describe('send_draft CLI', () => {
     // Set environment variables
     process.env.METRICS_STORE_PATH = metricsPath;
     process.env.APPROVAL_TOKEN_SECRET = 'test-secret-for-send-draft';
+    process.env.SEND_QUEUE_PATH = queuePath;
 
     // Reset singletons
     resetSendPolicy();
     resetMetricsStore();
     resetDraftRegistry();
+    resetSendQueueStore();
+    resetSendQueueManager();
 
     // Create draft registry and register test draft
     draftRegistry = new DraftRegistry({
@@ -84,9 +93,12 @@ describe('send_draft CLI', () => {
     delete process.env.SEND_ALLOWLIST_DOMAINS;
     delete process.env.SEND_ALLOWLIST_EMAILS;
     delete process.env.SEND_MAX_PER_DAY;
+    delete process.env.SEND_QUEUE_PATH;
     resetSendPolicy();
     resetMetricsStore();
     resetDraftRegistry();
+    resetSendQueueStore();
+    resetSendQueueManager();
   });
 
   describe('registry checks', () => {
@@ -123,6 +135,7 @@ describe('send_draft CLI', () => {
         draftId: 'test-draft-123',
         to: 'user@test.com',
         approvalToken: validToken,
+        execute: true,
       };
 
       const result = await sendDraft(options);
@@ -356,6 +369,7 @@ describe('send_draft CLI', () => {
         draftId: 'test-draft-123',
         to: 'user@test.com',
         approvalToken: validToken,
+        execute: true,
         // No subject/body provided
       };
 
@@ -419,6 +433,7 @@ describe('send_draft CLI', () => {
         abVariant: 'A',
         subject: '件名 [CL-AI:a1b2c3d4]',
         body: '本文です。',
+        execute: true,
       };
 
       const result = await sendDraft(options);
@@ -458,6 +473,7 @@ describe('send_draft CLI', () => {
         to: 'user@test.com',
         approvalToken: validToken,
         trackingId: 'track123',
+        execute: true,
       };
 
       await sendDraft(options);
@@ -582,6 +598,101 @@ describe('send_draft CLI', () => {
       const count = store.countTodaySends();
 
       expect(count).toBe(2); // Only today's events
+    });
+  });
+
+  describe('enqueue behavior (default)', () => {
+    it('enqueues by default instead of sending', async () => {
+      process.env.ENABLE_AUTO_SEND = 'true';
+      process.env.SEND_ALLOWLIST_DOMAINS = 'test.com';
+
+      const options: SendDraftOptions = {
+        draftId: 'test-draft-123',
+        to: 'user@test.com',
+        approvalToken: validToken,
+        // No --execute flag
+      };
+
+      const result = await sendDraft(options);
+      expect(result.success).toBe(true);
+      expect(result.sent).toBe(false);
+      expect(result.queued).toBe(true);
+      expect(result.jobId).toBeDefined();
+      expect(result.jobId).toMatch(/^SND-/);
+    });
+
+    it('returns existing job_id if already queued', async () => {
+      process.env.ENABLE_AUTO_SEND = 'true';
+      process.env.SEND_ALLOWLIST_DOMAINS = 'test.com';
+
+      const options: SendDraftOptions = {
+        draftId: 'test-draft-123',
+        to: 'user@test.com',
+        approvalToken: validToken,
+      };
+
+      const first = await sendDraft(options);
+      const second = await sendDraft(options);
+
+      expect(first.success).toBe(true);
+      expect(second.success).toBe(true);
+      expect(second.jobId).toBe(first.jobId);
+      expect(second.details).toContain('Already in queue');
+    });
+
+    it('sends immediately when --execute is specified', async () => {
+      process.env.ENABLE_AUTO_SEND = 'true';
+      process.env.SEND_ALLOWLIST_DOMAINS = 'test.com';
+
+      const options: SendDraftOptions = {
+        draftId: 'test-draft-123',
+        to: 'user@test.com',
+        approvalToken: validToken,
+        execute: true,
+      };
+
+      const result = await sendDraft(options);
+      expect(result.success).toBe(true);
+      expect(result.sent).toBe(true);
+      expect(result.queued).toBe(false);
+      expect(result.messageId).toBeDefined();
+    });
+
+    it('dry run still works with enqueue default', async () => {
+      process.env.ENABLE_AUTO_SEND = 'true';
+      process.env.SEND_ALLOWLIST_DOMAINS = 'test.com';
+
+      const options: SendDraftOptions = {
+        draftId: 'test-draft-123',
+        to: 'user@test.com',
+        approvalToken: validToken,
+        dryRun: true,
+      };
+
+      const result = await sendDraft(options);
+      expect(result.success).toBe(true);
+      expect(result.dryRun).toBe(true);
+      expect(result.sent).toBe(false);
+      expect(result.queued).toBe(false);
+      expect(result.details).toContain('would enqueue');
+    });
+
+    it('dry run with --execute shows would send', async () => {
+      process.env.ENABLE_AUTO_SEND = 'true';
+      process.env.SEND_ALLOWLIST_DOMAINS = 'test.com';
+
+      const options: SendDraftOptions = {
+        draftId: 'test-draft-123',
+        to: 'user@test.com',
+        approvalToken: validToken,
+        dryRun: true,
+        execute: true,
+      };
+
+      const result = await sendDraft(options);
+      expect(result.success).toBe(true);
+      expect(result.dryRun).toBe(true);
+      expect(result.details).toContain('would send');
     });
   });
 });
