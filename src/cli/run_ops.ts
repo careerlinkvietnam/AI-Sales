@@ -1440,6 +1440,35 @@ program
     }
   });
 
+// ============================================================
+// Subcommand: incidents-report
+// ============================================================
+program
+  .command('incidents-report')
+  .description('Generate incident report with root cause classification')
+  .option('--since <date>', 'Start date (YYYY-MM-DD), default: 7 days ago')
+  .option('--markdown', 'Output as markdown')
+  .option('--json', 'Output as JSON')
+  .option('--notify', 'Send notification with summary (if webhook configured)')
+  .action(async (opts) => {
+    const args: string[] = [];
+
+    if (opts.since) {
+      args.push('--since', opts.since);
+    }
+    if (opts.markdown) {
+      args.push('--markdown');
+    }
+    if (opts.json) {
+      args.push('--json');
+    }
+    if (opts.notify) {
+      args.push('--notify');
+    }
+
+    await execCli('report_incidents', args);
+  });
+
 // Parse and run
 program.parse();
 

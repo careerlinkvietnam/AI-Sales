@@ -2087,6 +2087,154 @@ npx ts-node src/cli/run_ops.ts incident close INC-20260127-001 \
 - `kill_switch_state`: 停止スイッチ状態
 - `active_templates`: アクティブなテンプレートID
 
+### 7.25 インシデントレポート（P4-7）
+
+インシデントを原因カテゴリで可視化し、再発防止をデータで回します。
+
+#### 原因カテゴリ（Root Cause Categories）
+
+インシデントは以下のカテゴリに自動分類されます：
+
+| カテゴリID | 名称 | 説明 |
+|------------|------|------|
+| `policy_config` | ポリシー設定問題 | allowlist未設定、ENABLE_AUTO_SEND=false、kill_switch_on |
+| `ramp_limited` | 段階リリース制限 | ramp制限が原因で送れない |
+| `auto_stop_triggered` | 自動停止発動 | 返信率低下/blocked率上昇による自動停止 |
+| `content_gate_failed` | コンテンツゲート違反 | PII/禁止表現/長さ/トラッキング欠落 |
+| `token_or_registry` | トークン/レジストリ問題 | not_in_registry, token_draft_mismatch, invalid_token |
+| `gmail_api` | Gmail API エラー | rate_limit, auth_error, transient_error |
+| `experiment_health` | 実験健全性問題 | experiment paused/ended, low_n 継続 |
+| `unknown` | 分類不能 | 上記に該当しない |
+
+#### カテゴリ設定ファイル
+
+`config/incident_categories.json` でカテゴリ定義を管理：
+
+```json
+{
+  "version": "1.0.0",
+  "categories": [
+    {
+      "id": "auto_stop_triggered",
+      "name_ja": "自動停止発動",
+      "detection_rules": {
+        "reason_keywords": ["reply rate", "Auto-stop"],
+        "trigger_types": ["AUTO_STOP"],
+        "actions_taken": ["runtime_kill_switch_enabled"]
+      },
+      "recommended_actions": [
+        "run_ops report で送信統計を確認",
+        "返信率低下の原因を調査"
+      ]
+    }
+  ]
+}
+```
+
+#### incidents-report コマンド
+
+```bash
+# 週次レポート生成（デフォルト7日間）
+npx ts-node src/cli/run_ops.ts incidents-report
+
+# 期間指定
+npx ts-node src/cli/run_ops.ts incidents-report --since "2026-01-20"
+
+# Markdown出力（ドキュメント用）
+npx ts-node src/cli/run_ops.ts incidents-report --markdown
+
+# JSON出力（スクリプト連携用）
+npx ts-node src/cli/run_ops.ts incidents-report --json
+
+# 通知付き（Webhook設定時）
+npx ts-node src/cli/run_ops.ts incidents-report --notify
+```
+
+#### レポート内容
+
+| セクション | 内容 |
+|------------|------|
+| Category Breakdown | カテゴリ別インシデント件数（Top10） |
+| Severity Breakdown | 重要度別件数（error/warn/info） |
+| Open Incidents | 未クローズのインシデント一覧 |
+| Recommended Actions | カテゴリごとの推奨対策 |
+
+#### 週次運用ルーチン
+
+```bash
+# 1. 週次レポート生成
+npx ts-node src/cli/run_ops.ts incidents-report --since "$(date -v-7d +%Y-%m-%d)" --markdown > weekly_incident_report.md
+
+# 2. Slack通知（オプション）
+npx ts-node src/cli/run_ops.ts incidents-report --notify
+
+# 3. オープンインシデントの確認
+npx ts-node src/cli/run_ops.ts incident list --status open
+
+# 4. 各インシデントの対処
+npx ts-node src/cli/run_ops.ts incident show <incident_id>
+```
+
+#### 推奨対策の読み方
+
+> **重要**: 推奨対策は「提案」であり、**自動修正は行われません**。
+
+各カテゴリには推奨対策が定義されています：
+
+| カテゴリ | 推奨対策例 |
+|----------|-----------|
+| `policy_config` | allowlist設定確認、ENABLE_AUTO_SEND確認、stop-status確認 |
+| `auto_stop_triggered` | report確認、safety確認、rollback検討、ramp縮小 |
+| `content_gate_failed` | TemplateQualityGate違反確認、テンプレ修正、再承認 |
+| `experiment_health` | status --all確認、safety確認、期間延長/ロールバック判断 |
+
+推奨対策に従って手動で対処し、インシデントをクローズしてください：
+
+```bash
+# 対処後、インシデントをクローズ
+npx ts-node src/cli/run_ops.ts incident close <incident_id> \
+  --actor "担当者名" \
+  --reason "原因: XXX、対策: YYY を実施"
+```
+
+#### レポート出力例（Markdown）
+
+```markdown
+# Incident Report
+
+**Period**: 2026-01-20 ~ 2026-01-27
+**Total Incidents**: 5
+
+## Category Breakdown
+
+| Rank | Category | Count |
+|------|----------|-------|
+| 1 | 自動停止発動 | 3 |
+| 2 | ポリシー設定問題 | 2 |
+
+## Severity Breakdown
+
+| Severity | Count |
+|----------|-------|
+| 🔴 error | 3 |
+| 🟡 warn | 2 |
+
+## Open Incidents
+
+| ID | Days Open | Category | Reason |
+|----|-----------|----------|--------|
+| INC-123... | 2 | 自動停止発動 | Reply rate too low |
+
+## Recommended Actions
+
+> **Note**: These are recommendations only. No automatic fixes are applied.
+
+### 自動停止発動
+
+- run_ops report --since で送信統計を確認
+- 返信率低下の原因を調査
+```
+
 ### 7.17 推奨送信ワークフロー
 
 下書き作成から送信までの推奨フローです。

@@ -1,0 +1,193 @@
+{
+  "version": "1.0.0",
+  "categories": [
+    {
+      "id": "policy_config",
+      "name": "Policy Configuration Issue",
+      "name_ja": "ポリシー設定問題",
+      "description": "Allowlist, kill switch, or auto-send configuration issues",
+      "detection_rules": {
+        "reason_keywords": [
+          "allowlist",
+          "ENABLE_AUTO_SEND",
+          "kill_switch",
+          "not_enabled",
+          "No allowlist configured"
+        ],
+        "snapshot_conditions": [
+          { "field": "kill_switch_state.env", "value": true },
+          { "field": "kill_switch_state.runtime", "value": true }
+        ],
+        "trigger_types": ["OPS_STOP_SEND"]
+      },
+      "recommended_actions": [
+        "SEND_ALLOWLIST_DOMAINS または SEND_ALLOWLIST_EMAILS を設定",
+        "ENABLE_AUTO_SEND=true を確認",
+        "run_ops stop-status で現在の停止状態を確認",
+        "必要に応じて run_ops resume-send で再開"
+      ],
+      "severity_weight": 2
+    },
+    {
+      "id": "ramp_limited",
+      "name": "Ramp Limit Reached",
+      "name_ja": "段階リリース制限",
+      "description": "Daily sending limit reached due to ramp policy",
+      "detection_rules": {
+        "reason_keywords": [
+          "ramp",
+          "daily_cap",
+          "RAMP_LIMITED",
+          "ramp limit"
+        ],
+        "blocked_reasons": ["ramp_limited"]
+      },
+      "recommended_actions": [
+        "run_ops ramp-status で現在のキャップを確認",
+        "RAMP_DAILY_CAP の増加を検討（段階的に）",
+        "返信率が安定していればキャップを引き上げ"
+      ],
+      "severity_weight": 1
+    },
+    {
+      "id": "auto_stop_triggered",
+      "name": "Auto-Stop Triggered",
+      "name_ja": "自動停止発動",
+      "description": "Automatic stop due to low reply rate or high blocked rate",
+      "detection_rules": {
+        "reason_keywords": [
+          "reply rate",
+          "Reply rate too low",
+          "blocked rate",
+          "consecutive",
+          "Auto-stop"
+        ],
+        "trigger_types": ["AUTO_STOP"],
+        "actions_taken": ["runtime_kill_switch_enabled"]
+      },
+      "recommended_actions": [
+        "run_ops report --since で送信統計を確認",
+        "返信率低下の原因を調査（テンプレ/対象企業）",
+        "run_ops safety で実験の健全性を確認",
+        "必要に応じて run_ops rollback で実験を停止",
+        "段階リリースのキャップを縮小して再開を検討"
+      ],
+      "severity_weight": 3
+    },
+    {
+      "id": "content_gate_failed",
+      "name": "Content Gate Failed",
+      "name_ja": "コンテンツゲート違反",
+      "description": "Template quality gate violations (PII, forbidden terms, length, tracking)",
+      "detection_rules": {
+        "reason_keywords": [
+          "PII",
+          "forbidden",
+          "tracking",
+          "content_gate",
+          "TemplateQualityGate",
+          "validation failed",
+          "too long",
+          "too short"
+        ],
+        "blocked_reasons": ["content_gate_failed"]
+      },
+      "recommended_actions": [
+        "TemplateQualityGateの違反一覧を確認",
+        "テンプレートを修正（PII除去/長さ調整）",
+        "トラッキングIDの挿入を確認",
+        "テンプレートを再承認"
+      ],
+      "severity_weight": 2
+    },
+    {
+      "id": "token_or_registry",
+      "name": "Token/Registry Issue",
+      "name_ja": "トークン/レジストリ問題",
+      "description": "Draft not in registry, token mismatch, or invalid approval token",
+      "detection_rules": {
+        "reason_keywords": [
+          "not_in_registry",
+          "token",
+          "draft_mismatch",
+          "invalid_token",
+          "registry",
+          "Draft not found",
+          "token mismatch"
+        ],
+        "blocked_reasons": ["not_in_registry", "token_draft_mismatch", "invalid_token"]
+      },
+      "recommended_actions": [
+        "DraftRegistryの状態を確認",
+        "下書きが正しく登録されているか確認",
+        "承認トークンの有効期限を確認",
+        "必要に応じて下書きを再作成・再承認"
+      ],
+      "severity_weight": 2
+    },
+    {
+      "id": "gmail_api",
+      "name": "Gmail API Error",
+      "name_ja": "Gmail API エラー",
+      "description": "Gmail API rate limits, authentication errors, or transient failures",
+      "detection_rules": {
+        "reason_keywords": [
+          "Gmail",
+          "rate_limit",
+          "auth_error",
+          "transient_error",
+          "API error",
+          "quota",
+          "authentication"
+        ],
+        "blocked_reasons": ["rate_limit", "auth_error", "transient_error"]
+      },
+      "recommended_actions": [
+        "Gmail API のクォータを確認",
+        "認証トークンの有効性を確認",
+        "GMAIL_REFRESH_TOKEN を更新",
+        "一時的なエラーの場合はリトライを待つ"
+      ],
+      "severity_weight": 2
+    },
+    {
+      "id": "experiment_health",
+      "name": "Experiment Health Issue",
+      "name_ja": "実験健全性問題",
+      "description": "Experiment paused, ended, or continuing with low sample size",
+      "detection_rules": {
+        "reason_keywords": [
+          "experiment",
+          "paused",
+          "ended",
+          "low_n",
+          "sample size",
+          "Experiment failed",
+          "ROLLBACK"
+        ],
+        "trigger_types": ["OPS_ROLLBACK"],
+        "actions_taken": ["experiment_paused"]
+      },
+      "recommended_actions": [
+        "run_ops status --all で実験状態を確認",
+        "run_ops safety で実験の健全性を評価",
+        "サンプルサイズが不足の場合は期間延長を検討",
+        "パフォーマンスが悪い場合はロールバックを実行"
+      ],
+      "severity_weight": 2
+    },
+    {
+      "id": "unknown",
+      "name": "Unknown/Unclassified",
+      "name_ja": "分類不能",
+      "description": "Incident could not be classified into a known category",
+      "detection_rules": {},
+      "recommended_actions": [
+        "インシデントの詳細を手動で確認",
+        "新しいカテゴリの追加を検討",
+        "incident note でメモを追記"
+      ],
+      "severity_weight": 1
+    }
+  ]
+}
