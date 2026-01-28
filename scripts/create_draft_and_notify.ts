@@ -140,25 +140,27 @@ async function createDraftAndNotify(info: DraftInfo) {
   return result;
 }
 
-// Execute for One Asia Lawyers Vietnam
+// Execute for HARIMA FC
 const draftInfo: DraftInfo = {
-  companyId: '17529',
-  companyName: 'One Asia Lawyers Vietnam Co.,LTD',
-  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/17529',
-  recipientEmail: 'fubito.yamamoto@oneasia.legal',
-  recipientName: '山本様',
-  subject: '採用活動のご状況確認【キャリアリンク佐藤】',
-  body: `One Asia Lawyers Vietnam Co.,LTD
-山本様
+  companyId: '17281',
+  companyName: 'HARIMA FC Co.,Ltd.',
+  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/17281',
+  recipientEmail: 'naito.takeaki@nissin.vn',
+  recipientName: '内藤様',
+  subject: 'ご挨拶【キャリアリンク佐藤】',
+  body: `HARIMA FC Co.,Ltd.
+内藤様
 
 お世話になっております。
 キャリアリンクの佐藤でございます。
 
-現在いただいている求人状況について、
-変更などはございませんでしょうか？
+弊社では営業や営業事務、貿易事務のご紹介が可能です。
 
-追加のご要望などございましたら、
-お気軽にお申し付けください。
+もし採用についてお困りのことがあれば、
+お気軽にご相談ください。
+
+「まだ具体的ではないけど、ちょっと話を聞きたい」
+というご連絡も大歓迎です。
 
 引き続きよろしくお願いいたします。
 
@@ -187,17 +189,15 @@ Tel: (024) 3519 0410
 ■タイ(Thai office)
 CareerLink Recruitment Thailand Co.,Ltd.
 Room 58S, 47 Sukhumvit 69 Rd., Phra Khanong Nuea, Watthana, Bangkok, Thailand`,
-  companySummary: `• 日系法律事務所（One Asia Lawyers）
-• 法務・コンサルタントサービス
-• 佐藤・訪問済`,
-  actionSummary: `• 求人受領中クライアントへの進捗確認
-• 現在アクティブ案件あり（南部・求人受領中タグ）
-• テンプレート: パターンC（求人受領中向け）`,
+  companySummary: `• 日系企業（商社・メーカー）
+• 家電・生活雑貨・医療・化粧品・ヘルスケア`,
+  actionSummary: `• 定期フォロー
+• テンプレート: パターンB（営業・営業事務・貿易事務）`,
   contactHistory: {
-    visit: '佐藤・訪問済（日付不明）',
+    visit: 'なし',
     phone: 'なし',
     email: 'なし',
-    lastContact: '訪問履歴あり'
+    lastContact: '不明'
   },
   hasPersonalEmail: true
 };

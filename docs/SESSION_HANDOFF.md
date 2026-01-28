@@ -376,9 +376,10 @@ Room 58S, 47 Sukhumvit 69 Rd., Phra Khanong Nuea, Watthana, Bangkok, Thailand
 ### 本文パターン（定期フォロー用）
 
 **パターンA: 具体的な価値を伝える**
+※職種は企業の業種に合わせて変更する（下記「職種カスタマイズルール」参照）
 ```
-弊社では日系企業様向けに、日本語人材・バイリンガル人材のご紹介を
-数多く行っております。
+弊社では日系企業様向けに、{職種}、その他御社の業務内容に
+合った候補者のご紹介を数多く行っております。
 
 「こんな人材がいたら相談したい」
 「まずは市場の状況だけ知りたい」
@@ -388,7 +389,11 @@ Room 58S, 47 Sukhumvit 69 Rd., Phra Khanong Nuea, Watthana, Bangkok, Thailand
 ```
 
 **パターンB: シンプルに親しみやすく**
+※職種は企業の業種に合わせて変更する（下記「職種カスタマイズルール」参照）
 ```
+弊社では{職種}、その他御社の業務内容に合った
+候補者のご紹介が可能です。
+
 もし採用についてお困りのことがあれば、
 お気軽にご相談ください。
 
@@ -410,6 +415,21 @@ Room 58S, 47 Sukhumvit 69 Rd., Phra Khanong Nuea, Watthana, Bangkok, Thailand
 - 同じパターンを連続で使わない
 - 企業ごとにA→B→A→B...と交互に使用
 - バリエーションを持たせることで、テンプレート感を減らす
+
+**職種カスタマイズルール**
+パターンAの職種は企業の業種に合わせて変更する：
+
+| 業種 | 職種例 |
+|------|--------|
+| IT・オフショア | ITエンジニア、SE、プログラマー |
+| 製造・工場 | 生産管理、品質管理、技術者 |
+| 商社・メーカー | 営業、営業事務、貿易事務 |
+| 建設 | 施工管理、現場監督、CADオペレーター |
+| 物流 | 物流管理、倉庫管理、通関士 |
+| サービス・コンサル | コンサルタント、アシスタント |
+| 法務・会計 | 法務担当、経理、会計スタッフ |
+| 飲食・サービス | 店長候補、サービススタッフ |
+| 一般（不明時） | 日本語人材・バイリンガル人材 |
 
 ---
 
@@ -673,6 +693,10 @@ EOF
 | 17681 | Daiichi Corporation Vietnam | ✅ 下書き作成済み | CRM Action 234641（Murayama様宛て） |
 | 17555 | Alpia Vietnam Co.,Ltd | ✅ 下書き作成済み | CRM Action 234642（Satoshi Sato様宛て、企業サイトでメール発見） |
 | 17529 | One Asia Lawyers Vietnam | ✅ 下書き作成済み | CRM Action 234643（山本様宛て、求人受領中・パターンC使用） |
+| 17478 | Matsusaka EDP Center Infotech Vietnam | ✅ 下書き作成済み | CRM Action 234644（柴原様宛て、パターンA） |
+| 17420 | Arent Vietnam | ✅ 下書き作成済み | CRM Action 234645（後藤様宛て、パターンB） |
+| 17290 | Aria Vietnam Inc | ✅ 下書き作成済み | CRM Action 234646（別府様宛て、パターンA） |
+| 17281 | HARIMA FC | ✅ 下書き作成済み | CRM Action 234647（内藤様宛て、パターンB・営業/事務） |
 
 ### スキップ企業（メールなし）
 | 企業ID | 企業名 | 理由 |
@@ -689,6 +713,11 @@ EOF
 | 17845 | Toei Techno International Vietnam | メールなし |
 | 17823 | Hirochiku Asia Vietnam | メールなし（電話・フォームのみ） |
 | 17688 | Yoshikawa Logistics Vietnam | メールなし |
+| 17631 | Fujita-Denko Vietnam | メールなし |
+| 17462 | Vietnam Globits Technology | 連絡先不明タグ、適切なメールなし |
+| 17343 | HIROSE CONSULTING VIETNAM | メールなし、企業サイトなし |
+| 17316 | AVIENA STUDIO | 連絡先不明タグ、メールなし |
+| 17314 | CHUO KAKOHKI VIETNAM | 日本人不在タグ、メールなし |
 
 ### 処理対象外（タグ不一致）
 以下の企業は「南部・1月連絡」の検索結果に出るが、実際のタグが異なるため処理対象外：
