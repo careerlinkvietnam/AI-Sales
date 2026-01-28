@@ -610,6 +610,7 @@ EOF
 | 18265 | Vina Takeuchi Co.,LTD | ✅ 下書き作成済み | CRM Action 234633 |
 | 18072 | Vina Nide Co.,LTD | ✅ 下書き作成済み | CRM Action 234635 |
 | 18061 | LJTrading Co.,LTD | ✅ 下書き作成済み | CRM Action 234637（連絡先不明タグ→企業サイトでメール発見） |
+| 17991 | Sankei Manufacturing Vietnam | ✅ 下書き作成済み | CRM Action 234638（既存クライアント、窪田様宛て） |
 
 ### スキップ企業（メールなし）
 | 企業ID | 企業名 | 理由 |

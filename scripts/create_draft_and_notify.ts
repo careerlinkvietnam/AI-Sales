@@ -140,50 +140,66 @@ async function createDraftAndNotify(info: DraftInfo) {
   return result;
 }
 
-// Execute for LJTrading
+// Execute for Sankei Manufacturing
 const draftInfo: DraftInfo = {
-  companyId: '18061',
-  companyName: 'LJTrading Co.,LTD Ho Chi Minh Representative Office',
-  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/18061',
-  recipientEmail: 'info@lj-worldwide.com',
-  recipientName: '採用ご担当者様',
-  subject: 'ご挨拶【キャリアリンク佐藤】',
-  body: `LJTrading株式会社
-採用ご担当者様
+  companyId: '17991',
+  companyName: 'Sankei Manufacturing Vietnam Co., Ltd.',
+  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/17991',
+  recipientEmail: 'n-kubota@ngo-sankei.co.jp',
+  recipientName: '窪田様',
+  subject: '採用状況のご確認【キャリアリンク佐藤】',
+  body: `株式会社三景
+窪田様
 
-初めてご連絡させていただきます。
-キャリアリンクの佐藤と申します。
+いつもお世話になっております。
+キャリアリンクの佐藤でございます。
 
-弊社はベトナムにて人材紹介サービスを提供しております。
-貴社のベトナム駐在員事務所について、
-将来的な採用のご予定がございましたら
-お手伝いできればと思いご連絡いたしました。
+その後、採用活動のご状況はいかがでしょうか。
 
-弊社では【人材紹介サービス】と【Webリクルーティングサービス】の
-2つのサービスを提供しております。
+もし現在採用をご検討中のポジションがございましたら、
+お気軽にご相談ください。
 
-・人材紹介サービス: 日本語・英語人材、管理職人材のご紹介
-・Webリクルーティング: 求人広告の掲載・運用
+引き続きよろしくお願いいたします。
 
-もしご関心がございましたら、お気軽にお知らせください。
-
-何卒よろしくお願いいたします。
-
-キャリアリンク
-佐藤`,
-  companySummary: `• 日系企業（千葉県佐倉市本社）
-• 商社・メーカー
-• ベトナム・駐在員事務所`,
-  actionSummary: `• 初回コンタクト
-• テンプレート: パターン5ベース（ご挨拶）
-• 企業サイトでメール発見（CRM連絡先不明タグあり）`,
+--
+『人をつなぎ、キャリアを創る』
+キャリアリンク (CareerLink Co., Ltd.)
+佐藤　舞 (Ms. Mai Sato)
+Mobile : (+84)091-140-1961
+Tel(日本人直通) : 028-3812-7983
+HR-Website : https://www.CareerLink.vn
+License : 31116/SLDTBXH-GPGH
+-----------------------------------
+ホーチミンヘッドオフィス(HCMC Head Office) :
+Room 302, 270–272 Cong Hoa Street, Tan Binh Ward, Ho Chi Minh City
+------------------------------------
+ハノイオフィス(HN Office) :
+Room 307, DMC Tower, 535 Kim Ma St, Giang Vo Ward, Ha Noi City
+Tel: (024) 3519 0410
+ダナンオフィス(DN Office)：
+8th Floor, ACB Da Nang Tower, 218 Bach Dang St, Hai Chau Ward, Da Nang City
+■日本(Japan Office)
+キャリアリンクアジア株式会社
+千葉県千葉市中央区栄町36－10　甲南アセット千葉中央ビル5F-D
+厚生労働大臣許可番号：12-ユ-300460
+登録支援許可番号：20登-003823
+■タイ(Thai office)
+CareerLink Recruitment Thailand Co.,Ltd.
+Room 58S, 47 Sukhumvit 69 Rd., Phra Khanong Nuea, Watthana, Bangkok, Thailand`,
+  companySummary: `• 日系製造業（株式会社三景）
+• 風呂敷、包装材製造
+• Hung Yen工場（北部）
+• 人材紹介契約済み`,
+  actionSummary: `• 定期フォロー（3ヶ月ぶり）
+• 前回: 2025-11-05 電話（窪田様）
+• テンプレート: パターン4（シンプル状況確認）`,
   contactHistory: {
-    visit: 'なし',
-    phone: 'なし',
+    visit: '2025-03-27 Mr. Sumi',
+    phone: '2025-11-05 Ms. Sato Mai（窪田様）',
     email: 'なし',
-    lastContact: 'なし（未コンタクト）'
+    lastContact: '2025-11-05（電話）'
   },
-  hasPersonalEmail: false
+  hasPersonalEmail: true
 };
 
 createDraftAndNotify(draftInfo).then(() => {
