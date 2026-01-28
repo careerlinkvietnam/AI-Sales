@@ -75,16 +75,21 @@ CareerLink HR Frontend は Ruby on Rails 5.1 ベースの HR/CRM システム。
 
 ### 2.1 企業関連
 
-| メソッド | パス | 用途 | コントローラー |
+| メソッド | パス | 用途 | レスポンス形式 |
 |----------|------|------|----------------|
-| GET | `/companies` | 企業一覧（ページング・検索対応） | `companies#index` |
-| GET | `/companies/:id` | 企業詳細 | `companies#show` |
-| POST | `/companies` | 企業作成 | `companies#create` |
-| PUT | `/companies/:id` | 企業更新 | `companies#update` |
-| DELETE | `/companies/:id` | 企業削除 | `companies#destroy` |
-| GET | `/companies/tags` | タグで企業フィルター | `companies#tags` |
+| GET | `/companies` | 企業一覧（ページング・検索対応） | HTML |
+| GET | `/companies/:id` | 企業詳細 | **JSON** (Accept: application/json) |
+| POST | `/companies` | 企業作成 | JSON |
+| PUT | `/companies/:id` | 企業更新 | JSON |
+| DELETE | `/companies/:id` | 企業削除 | JSON |
+| GET | `/companies/tags` | タグで企業フィルター | **HTML only** (JSON不可) |
 
 **根拠**: `config/routes.rb:20-35`
+
+**注意**:
+- `/companies/tags`はHTMLのみ返し、Accept: application/jsonは406 Not Acceptableになる
+- `/companies/:id`はJSONで企業詳細を取得可能
+- **重要** (2026-01-27発見): JSON APIは担当者メールアドレスを含まない。HTMLページには表示されるため、CrmClientは両方から情報を取得する
 
 ### 2.2 タグ関連
 
@@ -124,6 +129,8 @@ CareerLink HR Frontend は Ruby on Rails 5.1 ベースの HR/CRM システム。
 | GET | `/timeline/agents/:agent_id` | 担当者別アクティビティ |
 
 **根拠**: `config/routes.rb:75-78`
+
+**注意** (2026-01-27確認): タイムラインエンドポイントは現在**HTTP 500エラー**を返す場合があります。CrmClientでは連絡履歴取得に失敗した場合、空の履歴で続行するよう実装されています。
 
 ### 2.5 ヘルスチェック
 
@@ -421,10 +428,69 @@ curl -X GET "http://localhost:3000/tags" \
 **現状**: hr_frontend には ID/PASS でトークンを取得する API がない
 
 **対応方針**:
-1. `CRM_SESSION_TOKEN` 環境変数があればそれを使用（既存互換）
+1. `CRM_SESSION_TOKEN` 環境変数があればそれを使用（推奨）
 2. なければ外部認証サービスへのログインを試行
-3. 外部認証サービスのエンドポイント: `https://{CRM_AUTH_HOST}/siankaan0422/login`
-4. POST でメール/パスワード送信 → Set-Cookie または JSON でトークン取得
+
+### 7.5 外部認証サービス詳細（2026-01-27 調査確定）
+
+**重要**: ログインエンドポイントは `/siankaan0421`（JP offset）を使用する。
+
+**ログインフロー**:
+
+```
+1. GET  /siankaan0421/login          → ログインフォーム表示 + CSRFトークン取得
+2. POST /siankaan0421/login_check    → フォーム送信
+   Content-Type: application/x-www-form-urlencoded
+   Body:
+     - _username=<email>
+     - _password=<password>
+     - authenticity_token=<CSRFトークン>  ← 必須！
+     - target_path=（空でOK）
+3. 成功時: /siankaan0421 へリダイレクト（302）、セッションCookie設定
+   失敗時: /siankaan0421/login へリダイレクト
+```
+
+**セッションCookie**:
+- `C24ADMINSESSID`: メインセッションID
+- `_c24_session`: セッションデータ（暗号化）
+
+**重要な発見**:
+- `/siankaan0422` は VN サイト用だが、認証は `/siankaan0421`（JP）を使用
+- `authenticity_token`（CSRFトークン）が必須
+- CSRFトークンはログインページのhiddenフィールドから取得
+- ログイン成功後はCookieベースのセッション認証
+
+**エラーメッセージ**:
+- 認証失敗: 「Eメール（会員ID）、またはパスワードが違います。」
+- CSRFなし: HTTP 422（システムエラー）
+
+### 7.6 タグ一覧取得
+
+**エンドポイント**: `GET /executive-search/vn/tags`
+
+**認証**: セッションCookie必須
+
+**レスポンス例**:
+```json
+["日系企業","IT企業","南部・1月連絡","南部・2月連絡","北部・1月連絡",...]
+```
+
+**月別連絡タグの形式**:
+- `南部・1月連絡` 〜 `南部・12月連絡`
+- `北部・1月連絡` 〜 `北部・12月連絡`
+- `中部・1月連絡` 〜 `中部・12月連絡`
+
+### 7.7 セッショントークン取得方法（手動）
+
+ブラウザでログイン後、DevTools で取得:
+
+```
+1. https://www.careerlink.vn:1443/siankaan0421/login にアクセス
+2. 認証情報でログイン
+3. DevTools > Network > 任意のAPIリクエスト
+4. Request Headers から X-Cl-Session-Admin の値をコピー
+5. .env の CRM_SESSION_TOKEN に設定
+```
 
 ---
 
@@ -445,6 +511,8 @@ curl -X GET "http://localhost:3000/tags" \
 
 **エンドポイント**: `GET /companies/tags`
 
+**重要**: このエンドポイントは**HTMLを返す**（JSONではない）。Accept: application/jsonは406 Not Acceptableになる。
+
 **パラメータ**:
 | パラメータ | 型 | 説明 |
 |------------|-----|------|
@@ -453,12 +521,14 @@ curl -X GET "http://localhost:3000/tags" \
 | `page` | integer | ページ番号（デフォルト: 1） |
 
 **レスポンス形式**:
-```
-Company.search() → [items_array, total_count]
-```
+- HTML形式。企業データはHTMLテーブル内に含まれる
+- CrmClientではHTMLをパースして企業ID・名前を抽出
 
-- `@companies` - 企業の配列
-- `@num_companies` - 総件数（ページング用）
+**HTMLからのデータ抽出**:
+```typescript
+// 正規表現で企業リンクを抽出
+/<a[^>]*href="\/executive-search\/vn\/companies\/(\d+)"[^>]*>([^<]+)<\/a>/g
+```
 
 **根拠**: `app/controllers/companies_controller.rb:19-41`
 

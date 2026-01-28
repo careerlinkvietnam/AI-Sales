@@ -44,6 +44,51 @@ import {
 // Load environment variables
 config();
 
+// Mock data for testing
+const MOCK_COMPANIES: CompanyStub[] = [
+  { companyId: '1', name: 'ABC Manufacturing Co., Ltd.', region: '南部' },
+  { companyId: '2', name: 'XYZ Tech Vietnam', region: '南部' },
+  { companyId: '3', name: 'Delta Logistics', region: '南部' },
+];
+
+const MOCK_COMPANY_DETAIL: import('../types').CompanyDetail = {
+  companyId: '1',
+  name: 'ABC Manufacturing Co., Ltd.',
+  nameLocal: 'ABC製造株式会社',
+  profile: '製造業を営む日系企業。自動車部品の製造を主力とし、ベトナム南部に工場を持つ。',
+  size: '100-500名',
+  region: '南部',
+  province: 'ホーチミン市',
+  address: '123 Industrial Zone, District 7',
+  contactEmail: 'hr@abc-manufacturing.example.com',
+  phone: '+84-28-1234-5678',
+  contactPerson: '田中太郎',
+  tags: ['南部・3月連絡', '製造業', '日系'],
+  createdAt: '2024-01-01',
+  updatedAt: '2026-01-15',
+};
+
+const MOCK_CONTACT_HISTORY: import('../types').ContactHistory = {
+  companyId: '1',
+  items: [
+    {
+      actionId: 'h1',
+      actionType: 'tel',
+      performedAt: '2026-01-10T10:00:00Z',
+      agentName: '佐藤',
+      summary: '3月の採用計画について確認。エンジニア2名、営業1名の採用予定。',
+    },
+    {
+      actionId: 'h2',
+      actionType: 'visit',
+      performedAt: '2025-12-15T14:00:00Z',
+      agentName: '佐藤',
+      summary: '年末挨拶で訪問。来年の採用予算が増加予定とのこと。',
+    },
+  ],
+  totalCount: 2,
+};
+
 // CLI Configuration
 const program = new Command();
 
@@ -53,15 +98,23 @@ program
   .version('0.1.0');
 
 program
-  .requiredOption('-t, --tag <tag>', 'Raw tag to search (e.g., "南部・3月連絡")')
+  .option('-t, --tag <tag>', 'Raw tag to search (e.g., "南部・3月連絡"). If not specified, uses current month.')
+  .option('-r, --region <region>', 'Region for auto tag generation (default: 南部)', '南部')
   .option('-c, --company-id <id>', 'Specific company ID to process (default: first match)')
   .option('--dry-run', 'Skip Gmail draft creation, output email content only')
+  .option('--mock', 'Use mock CRM data instead of real API')
   .option('-v, --verbose', 'Show detailed output for each step')
   .option('--json', 'Output results as JSON only (no progress messages)');
 
 program.parse();
 
 const options = program.opts();
+
+// Auto-generate tag from current month if not specified
+if (!options.tag) {
+  const currentMonth = new Date().getMonth() + 1; // 1-12
+  options.tag = `${options.region}・${currentMonth}月連絡`;
+}
 
 /**
  * Pipeline result structure
@@ -182,29 +235,41 @@ async function runPipeline(): Promise<PipelineResult> {
     // ============================================================
     log('Step 2: Searching CRM for companies...');
 
-    try {
-      validateCrmConfig();
-    } catch (error) {
-      if (error instanceof ConfigurationError) {
-        result.errors.push(`CRM config error: ${error.message}`);
-        return result;
+    let companies: CompanyStub[];
+    let crmClient: CrmClient | null = null;
+
+    if (options.mock) {
+      // Use mock data
+      logVerbose('   Using mock data');
+      companies = MOCK_COMPANIES.filter(c =>
+        normalized.region ? c.region === normalized.region : true
+      );
+    } else {
+      // Use real CRM
+      try {
+        validateCrmConfig();
+      } catch (error) {
+        if (error instanceof ConfigurationError) {
+          result.errors.push(`CRM config error: ${error.message}`);
+          return result;
+        }
+        throw error;
       }
-      throw error;
+
+      crmClient = CrmClient.createFromEnv();
+
+      // Login
+      logVerbose('   Authenticating...');
+      await crmClient.login();
+      logVerbose('   Authentication successful');
+
+      // Search
+      logVerbose(`   Searching for tag: ${options.tag}`);
+      companies = await crmClient.searchCompaniesByRawTag(options.tag);
     }
 
-    const crmClient = CrmClient.createFromEnv();
-
-    // Login
-    logVerbose('   Authenticating...');
-    await crmClient.login();
-    logVerbose('   Authentication successful');
-
-    // Search
-    logVerbose(`   Searching for tag: ${options.tag}`);
-    const companies = await crmClient.searchCompaniesByRawTag(options.tag);
     result.searchResultCount = companies.length;
-
-    log(`   Found ${companies.length} companies`);
+    log(`   Found ${companies.length} companies${options.mock ? ' (mock)' : ''}`);
 
     if (companies.length === 0) {
       result.errors.push('No companies found matching the tag');
@@ -237,10 +302,30 @@ async function runPipeline(): Promise<PipelineResult> {
     // ============================================================
     log('Step 4: Fetching company details...');
 
-    const [companyDetail, contactHistory] = await Promise.all([
-      crmClient.getCompanyDetail(selectedCompany.companyId),
-      crmClient.getCompanyContactHistory(selectedCompany.companyId),
-    ]);
+    let companyDetail;
+    let contactHistory;
+
+    if (options.mock) {
+      // Use mock detail and history
+      companyDetail = MOCK_COMPANY_DETAIL;
+      contactHistory = MOCK_CONTACT_HISTORY;
+    } else {
+      // Get company detail (required)
+      companyDetail = await crmClient!.getCompanyDetail(selectedCompany.companyId);
+
+      // Try to get contact history (optional - may fail due to server issues)
+      try {
+        contactHistory = await crmClient!.getCompanyContactHistory(selectedCompany.companyId);
+      } catch (historyError) {
+        logVerbose(`   Warning: Could not fetch contact history: ${historyError instanceof Error ? historyError.message : 'Unknown error'}`);
+        // Use empty history as fallback
+        contactHistory = {
+          companyId: selectedCompany.companyId,
+          items: [],
+          totalCount: 0,
+        };
+      }
+    }
 
     logVerbose(`   Profile length: ${companyDetail.profile?.length || 0} chars`);
     logVerbose(`   Contact history: ${contactHistory.totalCount || 0} records`);

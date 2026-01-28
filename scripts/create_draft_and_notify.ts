@@ -140,24 +140,25 @@ async function createDraftAndNotify(info: DraftInfo) {
   return result;
 }
 
-// Execute for Vietnam Shell Stone
+// Execute for One Asia Lawyers Vietnam
 const draftInfo: DraftInfo = {
-  companyId: '17854',
-  companyName: 'Vietnam Shell Stone Co.,LTD',
-  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/17854',
-  recipientEmail: 'shellstonevietnam@gmail.com',
-  recipientName: '貝原様',
-  subject: '採用状況のご確認【キャリアリンク佐藤】',
-  body: `Vietnam Shell Stone
-貝原様
+  companyId: '17529',
+  companyName: 'One Asia Lawyers Vietnam Co.,LTD',
+  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/17529',
+  recipientEmail: 'fubito.yamamoto@oneasia.legal',
+  recipientName: '山本様',
+  subject: '採用活動のご状況確認【キャリアリンク佐藤】',
+  body: `One Asia Lawyers Vietnam Co.,LTD
+山本様
 
 お世話になっております。
 キャリアリンクの佐藤でございます。
 
-その後、採用活動のご状況はいかがでしょうか。
+現在いただいている求人状況について、
+変更などはございませんでしょうか？
 
-もし現在採用をご検討中のポジションがございましたら、
-お気軽にご相談ください。
+追加のご要望などございましたら、
+お気軽にお申し付けください。
 
 引き続きよろしくお願いいたします。
 
@@ -186,17 +187,17 @@ Tel: (024) 3519 0410
 ■タイ(Thai office)
 CareerLink Recruitment Thailand Co.,Ltd.
 Room 58S, 47 Sukhumvit 69 Rd., Phra Khanong Nuea, Watthana, Bangkok, Thailand`,
-  companySummary: `• 日系企業（シェルストーン）
-• ホテル・レストラン向け業務用食器、備品
-• 商品企画、開発、生産管理、品質管理`,
-  actionSummary: `• 定期フォロー（5ヶ月ぶり）
-• 前回: 2025-08-14 Ms. Sato Mai
-• テンプレート: パターン4（シンプル状況確認）`,
+  companySummary: `• 日系法律事務所（One Asia Lawyers）
+• 法務・コンサルタントサービス
+• 佐藤・訪問済`,
+  actionSummary: `• 求人受領中クライアントへの進捗確認
+• 現在アクティブ案件あり（南部・求人受領中タグ）
+• テンプレート: パターンC（求人受領中向け）`,
   contactHistory: {
-    visit: 'なし',
+    visit: '佐藤・訪問済（日付不明）',
     phone: 'なし',
     email: 'なし',
-    lastContact: '2025-08-14（Ms. Sato Mai）'
+    lastContact: '訪問履歴あり'
   },
   hasPersonalEmail: true
 };
