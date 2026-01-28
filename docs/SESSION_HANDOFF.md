@@ -564,6 +564,7 @@ EOF
 | 18484 | Access Professional Vietnam | ❌ 誤処理（3月タグ） | CRM Action 234601 要削除 |
 | 18265 | Vina Takeuchi Co.,LTD | ✅ 下書き作成済み | CRM Action 234633 |
 | 18072 | Vina Nide Co.,LTD | ✅ 下書き作成済み | CRM Action 234635 |
+| 18061 | LJTrading Co.,LTD | ✅ 下書き作成済み | CRM Action 234637（連絡先不明タグ→企業サイトでメール発見） |
 
 ### スキップ企業（メールなし）
 | 企業ID | 企業名 | 理由 |
@@ -574,6 +575,7 @@ EOF
 | 18446 | Otasuke | メールなし |
 | 18261 | Gildaon Vietnam | メールなし |
 | 18243 | Yamamori Vietnam | メールなし（連絡先不明タグ付与） |
+| 18062 | Osaki Precision Co.,LTD | メールなし（電話・フォームのみ） |
 
 ### 処理対象外（タグ不一致）
 以下の企業は「南部・1月連絡」の検索結果に出るが、実際のタグが異なるため処理対象外：
