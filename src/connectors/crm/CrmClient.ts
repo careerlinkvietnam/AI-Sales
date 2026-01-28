@@ -742,6 +742,88 @@ export class CrmClient {
   }
 
   /**
+   * Update a Tel Action (コールメモ)
+   *
+   * @param companyId - Company ID
+   * @param actionId - Action ID to update
+   * @param staffName - Contact person name
+   * @param log - Updated memo/notes
+   * @param place - Office name (optional)
+   * @param performedAt - When the action was performed (optional, keeps original if not specified)
+   * @returns Updated action details
+   */
+  async updateTelAction(
+    companyId: string,
+    actionId: string,
+    staffName: string,
+    log: string,
+    place?: string,
+    performedAt?: Date
+  ): Promise<{ id: number; companyId: number; log: string; performedAt: string }> {
+    await this.ensureAuthenticated();
+
+    // Get fresh CSRF token from company page
+    const companyPageHtml = await this.requestHtml(`/companies/${companyId}`);
+    const csrfMatch = companyPageHtml.match(/<meta[^>]*name="csrf-token"[^>]*content="([^"]+)"/);
+    if (!csrfMatch) {
+      throw new AuthError('CSRF token not found on company page');
+    }
+    const csrfToken = csrfMatch[1];
+
+    // Build form data
+    const timestamp = performedAt
+      ? Math.floor(performedAt.getTime() / 1000)
+      : Math.floor(Date.now() / 1000);
+
+    const formData = new URLSearchParams();
+    formData.append('sales_tel_action[id]', actionId);
+    formData.append('sales_tel_action[company_id]', companyId);
+    formData.append('sales_tel_action[performed_at]', timestamp.toString());
+    formData.append('sales_tel_action[staff_name]', staffName);
+    formData.append('sales_tel_action[place]', place || '');
+    formData.append('sales_tel_action[add_as_new_office]', '');
+    formData.append('sales_tel_action[log]', log);
+
+    const url = `${this.baseUrl}/companies/${companyId}/sales_actions/${actionId}`;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Accept': 'application/json, text/javascript, */*; q=0.01',
+      'x-csrf-token': csrfToken,
+      'x-requested-with': 'XMLHttpRequest',
+    };
+
+    if (this.sessionCookies) {
+      headers['Cookie'] = this.sessionCookies;
+    }
+
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers,
+      body: formData.toString(),
+    });
+
+    if (response.status === 200) {
+      const data = await response.json() as {
+        id: number;
+        company_id: number;
+        log: string;
+        performed_at: string;
+      };
+      return {
+        id: data.id,
+        companyId: data.company_id,
+        log: data.log,
+        performedAt: data.performed_at,
+      };
+    } else if (response.status === 422) {
+      throw new NetworkError('Failed to update tel action: validation error', 422);
+    } else {
+      throw new NetworkError(`Failed to update tel action: HTTP ${response.status}`, response.status);
+    }
+  }
+
+  /**
    * Check if currently authenticated
    */
   isAuthenticated(): boolean {
