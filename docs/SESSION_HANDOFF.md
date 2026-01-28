@@ -655,6 +655,7 @@ EOF
 | 17991 | Sankei Manufacturing Vietnam | ✅ 下書き作成済み | CRM Action 234638（既存クライアント、窪田様宛て） |
 | 17854 | Vietnam Shell Stone Co.,LTD | ✅ 下書き作成済み | CRM Action 234639（貝原様宛て） |
 | 17758 | Unifast Co.,Ltd | ✅ 下書き作成済み | CRM Action 234640（臼倉様宛て、米良引き継ぎ） |
+| 17681 | Daiichi Corporation Vietnam | ✅ 下書き作成済み | CRM Action 234641（Murayama様宛て） |
 
 ### スキップ企業（メールなし）
 | 企業ID | 企業名 | 理由 |
@@ -670,6 +671,7 @@ EOF
 | 17974 | Bonsai Sane Co.,LTD | メールなし、企業サイトなし |
 | 17845 | Toei Techno International Vietnam | メールなし |
 | 17823 | Hirochiku Asia Vietnam | メールなし（電話・フォームのみ） |
+| 17688 | Yoshikawa Logistics Vietnam | メールなし |
 
 ### 処理対象外（タグ不一致）
 以下の企業は「南部・1月連絡」の検索結果に出るが、実際のタグが異なるため処理対象外：
