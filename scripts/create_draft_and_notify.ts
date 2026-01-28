@@ -140,21 +140,22 @@ async function createDraftAndNotify(info: DraftInfo) {
   return result;
 }
 
-// Execute for HARIMA FC
+// Execute for Mercuria Vietnam
 const draftInfo: DraftInfo = {
-  companyId: '17281',
-  companyName: 'HARIMA FC Co.,Ltd.',
-  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/17281',
-  recipientEmail: 'naito.takeaki@nissin.vn',
-  recipientName: '内藤様',
+  companyId: '16983',
+  companyName: 'Mercuria (Vietnam) Co., LTD',
+  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/16983',
+  recipientEmail: 'aroon.t@mercuria.co.th',
+  recipientName: '百田様',
   subject: 'ご挨拶【キャリアリンク佐藤】',
-  body: `HARIMA FC Co.,Ltd.
-内藤様
+  body: `Mercuria (Vietnam) Co., LTD
+百田様
 
 お世話になっております。
 キャリアリンクの佐藤でございます。
 
-弊社では営業や営業事務、貿易事務のご紹介が可能です。
+弊社ではコンサルタントやアシスタント、その他御社の業務内容に合った
+候補者のご紹介が可能です。
 
 もし採用についてお困りのことがあれば、
 お気軽にご相談ください。
@@ -189,17 +190,16 @@ Tel: (024) 3519 0410
 ■タイ(Thai office)
 CareerLink Recruitment Thailand Co.,Ltd.
 Room 58S, 47 Sukhumvit 69 Rd., Phra Khanong Nuea, Watthana, Bangkok, Thailand`,
-  companySummary: `• 日系企業（商社・メーカー）
-• 家電・生活雑貨・医療・化粧品・ヘルスケア`,
+  companySummary: `• 日系企業（コンサルタント）`,
   actionSummary: `• 定期フォロー
-• テンプレート: パターンB（営業・営業事務・貿易事務）`,
+• テンプレート: パターンB（コンサルタント・アシスタント）`,
   contactHistory: {
     visit: 'なし',
     phone: 'なし',
     email: 'なし',
     lastContact: '不明'
   },
-  hasPersonalEmail: true
+  hasPersonalEmail: false
 };
 
 createDraftAndNotify(draftInfo).then(() => {

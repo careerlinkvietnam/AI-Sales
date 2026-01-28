@@ -113,13 +113,9 @@ async function main() {
   console.log('企業数:', companies.length);
   console.log('');
   console.log('=== 企業一覧 ===');
-  companies.slice(0, 30).forEach((c, i) => {
+  companies.forEach((c, i) => {
     console.log(`${i+1}. [${c.id}] ${c.name.substring(0, 60)}`);
   });
-
-  if (companies.length > 30) {
-    console.log(`... 他 ${companies.length - 30} 社`);
-  }
 
   // Check for specific companies
   console.log('');
