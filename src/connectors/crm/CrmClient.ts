@@ -10,7 +10,7 @@
  * Required Environment Variables:
  * - CRM_BASE_URL: CRM API base URL (required)
  * - CRM_AUTH_HOST: Auth service host (optional, defaults to CRM_BASE_URL origin)
- * - CRM_AUTH_PATH: Auth endpoint path (optional, defaults to /siankaan0422/sessions)
+ * - CRM_AUTH_PATH: Auth endpoint path (optional, defaults to /siankaan0422/login_check)
  *
  * Authentication (one required):
  * - CRM_SESSION_TOKEN: Pre-existing session token
@@ -33,7 +33,7 @@ import {
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_PAGE_SIZE = 10;
-const DEFAULT_AUTH_PATH = '/siankaan0422/sessions';
+const DEFAULT_AUTH_PATH = '/siankaan0422/login_check';
 
 /**
  * Validate required environment variables
@@ -118,6 +118,7 @@ export class CrmClient {
   private readonly timeout: number;
   private readonly maxRetries: number;
   private sessionToken: string | null = null;
+  private sessionCookies: string | null = null;
   private hasAttemptedReauth = false;
 
   constructor(config: CrmClientConfig) {
@@ -193,80 +194,216 @@ export class CrmClient {
 
   /**
    * Login with email/password to external auth service
+   *
+   * Authentication flow (2026-01-27 confirmed):
+   * 1. GET /siankaan0421/login to get CSRF token (authenticity_token)
+   * 2. POST /siankaan0421/login_check with form data including CSRF token
+   * 3. On success: redirects to dashboard (302), session cookies set
+   * 4. Store cookies for subsequent API requests
    */
   private async loginWithCredentials(email: string, password: string): Promise<void> {
-    const loginUrl = `${this.authHost}${this.authPath}`;
+    // Derive login page URL from auth path (login_check -> login)
+    const loginPagePath = this.authPath.replace('_check', '');
+    const loginPageUrl = `${this.authHost}${loginPagePath}`;
+    const loginCheckUrl = `${this.authHost}${this.authPath}`;
 
     try {
-      const response = await fetch(loginUrl, {
-        method: 'POST',
+      // Step 1: GET login page to extract CSRF token
+      const loginPageResponse = await fetch(loginPageUrl, {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          'Accept': 'text/html',
         },
-        body: JSON.stringify({
-          admin_session: {
-            email,
-            password,
-          },
-        }),
       });
 
-      if (!response.ok) {
-        if (response.status === 401) {
+      if (!loginPageResponse.ok) {
+        throw new AuthError(`Failed to load login page: HTTP ${loginPageResponse.status}`);
+      }
+
+      const loginPageHtml = await loginPageResponse.text();
+
+      // Extract CSRF token (authenticity_token)
+      const csrfMatch = loginPageHtml.match(/authenticity_token[^>]*value="([^"]+)"/);
+      if (!csrfMatch) {
+        throw new AuthError('CSRF token not found on login page');
+      }
+      const csrfToken = csrfMatch[1];
+
+      // Extract initial cookies
+      const initialCookies = this.getAllSetCookies(loginPageResponse);
+
+      // Step 2: POST login form with CSRF token
+      const formData = new URLSearchParams();
+      formData.append('_username', email);
+      formData.append('_password', password);
+      formData.append('authenticity_token', csrfToken);
+      formData.append('target_path', '');
+
+      const loginResponse = await fetch(loginCheckUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Cookie': this.extractCookieString(initialCookies),
+        },
+        body: formData.toString(),
+        redirect: 'manual',
+      });
+
+      // Step 3: Check response
+      if (loginResponse.status === 302) {
+        const location = loginResponse.headers.get('location') || '';
+
+        // If redirecting back to login page, credentials are invalid
+        if (location.includes('/login')) {
           throw new AuthError('Invalid email or password');
         }
-        if (response.status === 403) {
-          throw new AuthError('Account is locked or disabled');
-        }
-        if (response.status === 404) {
-          throw new AuthError(`Auth endpoint not found: ${this.authPath}`);
-        }
-        throw new NetworkError(`Login request failed: HTTP ${response.status}`, response.status);
-      }
 
-      // Try to extract token from response
-      const data = await response.json() as {
-        session_token?: string;
-        token?: string;
-        admin?: Record<string, unknown>;
-      };
+        // Success! Extract session cookies (new cookies override old)
+        const newCookies = this.getAllSetCookies(loginResponse);
+        this.sessionCookies = this.mergeCookies(initialCookies, newCookies);
 
-      // Token might be in response body or set-cookie header
-      if (data.session_token) {
-        this.sessionToken = data.session_token;
-      } else if (data.token) {
-        this.sessionToken = data.token;
-      } else if (data.admin) {
-        // Token might be the base64-encoded admin data itself
-        this.sessionToken = Buffer.from(JSON.stringify(data.admin)).toString('base64');
+        // Mark as authenticated (use cookie string as "token" indicator)
+        if (this.sessionCookies) {
+          this.sessionToken = 'cookie-auth';
+        }
+      } else if (loginResponse.status === 422) {
+        throw new AuthError('Login failed: CSRF token invalid or missing');
+      } else if (loginResponse.status === 200) {
+        // Check if error message in response
+        const text = await loginResponse.text();
+        if (text.includes('パスワードが違います') || text.includes('invalid')) {
+          throw new AuthError('Invalid email or password');
+        }
+        throw new AuthError('Login failed: unexpected response');
       } else {
-        // Check for Set-Cookie header
-        const setCookie = response.headers.get('set-cookie');
-        if (setCookie) {
-          const tokenMatch = setCookie.match(/session[_-]?token=([^;]+)/i);
-          if (tokenMatch) {
-            this.sessionToken = tokenMatch[1];
-          }
-        }
+        throw new NetworkError(`Login request failed: HTTP ${loginResponse.status}`, loginResponse.status);
       }
 
-      if (!this.sessionToken) {
-        throw new AuthError('Login succeeded but no session token received in response');
+      if (!this.sessionCookies) {
+        throw new AuthError('Login succeeded but no session cookies received');
       }
+
+      // Step 4: Access executive-search to get _hr_frontend_session cookie
+      // This is required for creating sales actions
+      await this.initializeHrFrontendSession();
 
     } catch (error) {
       if (error instanceof AuthError || error instanceof NetworkError) {
         throw error;
       }
-      // Network/fetch errors
       const message = error instanceof Error ? error.message : 'Unknown error';
       throw new AuthError(`Login failed: ${message}`);
     }
   }
 
   /**
+   * Initialize HR Frontend session by accessing executive-search pages
+   * This sets the _hr_frontend_session cookie required for sales actions
+   */
+  private async initializeHrFrontendSession(): Promise<void> {
+    if (!this.sessionCookies) return;
+
+    try {
+      // Access executive-search dashboard
+      const esResponse = await fetch(`${this.baseUrl}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'text/html',
+          'Cookie': this.sessionCookies,
+        },
+        redirect: 'follow',
+      });
+
+      const esCookies = this.getAllSetCookies(esResponse);
+      if (esCookies) {
+        this.sessionCookies = this.mergeCookies(this.sessionCookies, esCookies);
+      }
+    } catch {
+      // Non-fatal: session may still work for some operations
+    }
+  }
+
+  /**
+   * Extract cookie key=value pairs from Set-Cookie header(s)
+   * Handles both single header and multiple Set-Cookie headers
+   */
+  private extractCookieString(setCookieHeader: string | null): string {
+    if (!setCookieHeader) return '';
+
+    const cookies: string[] = [];
+
+    // Split by newline or comma (for multiple Set-Cookie values)
+    // Be careful not to split on commas within cookie values
+    const lines = setCookieHeader.split(/\n|(?<=;\s*),(?=\s*[^;]+=[^;]+)/);
+
+    for (const line of lines) {
+      // Extract just the cookie name=value part (before the first semicolon)
+      const cookiePart = line.split(';')[0].trim();
+      if (cookiePart && cookiePart.includes('=')) {
+        cookies.push(cookiePart);
+      }
+    }
+
+    return cookies.join('; ');
+  }
+
+  /**
+   * Get all Set-Cookie headers from response
+   * Node.js fetch may combine headers differently
+   */
+  private getAllSetCookies(response: Response): string {
+    // Try to get all cookies using getSetCookie if available (Node 18+)
+    const headers = response.headers as unknown as { getSetCookie?: () => string[] };
+    if (typeof headers.getSetCookie === 'function') {
+      return headers.getSetCookie().join('\n');
+    }
+
+    // Fallback to standard get
+    return response.headers.get('set-cookie') || '';
+  }
+
+  /**
+   * Merge cookies, with new cookies overriding old ones with the same key
+   */
+  private mergeCookies(oldCookies: string, newCookies: string): string {
+    const cookieMap = new Map<string, string>();
+
+    // Parse old cookies
+    for (const part of oldCookies.split(/[;\n]/)) {
+      const trimmed = part.trim();
+      const eqIndex = trimmed.indexOf('=');
+      if (eqIndex > 0) {
+        const key = trimmed.substring(0, eqIndex);
+        const value = trimmed.substring(eqIndex + 1);
+        // Skip cookie attributes
+        if (!['path', 'domain', 'expires', 'max-age', 'secure', 'httponly', 'samesite'].includes(key.toLowerCase())) {
+          cookieMap.set(key, value);
+        }
+      }
+    }
+
+    // Parse new cookies (overriding old)
+    for (const line of newCookies.split('\n')) {
+      const cookiePart = line.split(';')[0].trim();
+      const eqIndex = cookiePart.indexOf('=');
+      if (eqIndex > 0) {
+        const key = cookiePart.substring(0, eqIndex);
+        const value = cookiePart.substring(eqIndex + 1);
+        cookieMap.set(key, value);
+      }
+    }
+
+    return Array.from(cookieMap.entries())
+      .map(([k, v]) => `${k}=${v}`)
+      .join('; ');
+  }
+
+  /**
    * Search companies by raw tag string with pagination support
+   *
+   * Note: The /companies/tags endpoint returns HTML, not JSON.
+   * We parse the HTML to extract company IDs and names.
    *
    * @param rawTag - Tag to search for (e.g., "南部・3月連絡")
    * @param options - Search options (fetchAll, maxPages, tagQueryType)
@@ -281,33 +418,27 @@ export class CrmClient {
     const { fetchAll = true, maxPages = 100, tagQueryType = 'and' } = options;
 
     if (!fetchAll) {
-      // Single page fetch
-      const response = await this.request<CrmCompanyListResponse>(
+      // Single page fetch (HTML response)
+      const html = await this.requestHtml(
         `/companies/tags?tags=${encodeURIComponent(rawTag)}&tag_query_type=${tagQueryType}&page=1`
       );
-      return this.mapCompanyListResponse(response);
+      return this.parseCompanyListHtml(html);
     }
 
     // Fetch all pages
     const allCompanies: CompanyStub[] = [];
     let currentPage = 1;
-    let totalCount = 0;
 
     while (currentPage <= maxPages) {
-      const response = await this.request<CrmCompanyListResponse>(
+      const html = await this.requestHtml(
         `/companies/tags?tags=${encodeURIComponent(rawTag)}&tag_query_type=${tagQueryType}&page=${currentPage}`
       );
 
-      const companies = this.mapCompanyListResponse(response);
+      const companies = this.parseCompanyListHtml(html);
       allCompanies.push(...companies);
 
-      // Get total count from response (first page)
-      if (currentPage === 1) {
-        totalCount = response.num_companies || response.total_count || companies.length;
-      }
-
-      // Check if we have all companies
-      if (companies.length < DEFAULT_PAGE_SIZE || allCompanies.length >= totalCount) {
+      // Check if we got any companies (less than page size means last page)
+      if (companies.length < DEFAULT_PAGE_SIZE) {
         break;
       }
 
@@ -318,7 +449,140 @@ export class CrmClient {
   }
 
   /**
+   * Make an HTML request (for endpoints that only return HTML)
+   */
+  private async requestHtml(path: string): Promise<string> {
+    const url = `${this.baseUrl}${path}`;
+
+    const headers: Record<string, string> = {
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    };
+
+    if (this.sessionCookies) {
+      headers['Cookie'] = this.sessionCookies;
+    }
+
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < this.maxRetries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+        const response = await fetch(url, {
+          method: 'GET',
+          headers,
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.status === 401 || response.status === 403) {
+          if (!this.hasAttemptedReauth) {
+            this.hasAttemptedReauth = true;
+            this.sessionToken = null;
+            this.sessionCookies = null;
+            try {
+              await this.login();
+              return this.requestHtml(path);
+            } catch {
+              throw new AuthError('Session expired and re-authentication failed');
+            }
+          }
+          throw new AuthError('Session expired or invalid (re-auth already attempted)');
+        }
+
+        if (!response.ok) {
+          throw new NetworkError(
+            `HTTP ${response.status}: ${response.statusText}`,
+            response.status
+          );
+        }
+
+        return await response.text();
+
+      } catch (error) {
+        lastError = error as Error;
+
+        if (error instanceof AuthError) {
+          throw error;
+        }
+
+        if (error instanceof NetworkError && error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
+          throw error;
+        }
+
+        if (attempt < this.maxRetries - 1) {
+          await this.delay(Math.pow(2, attempt) * 1000);
+        }
+      }
+    }
+
+    throw lastError || new NetworkError('Request failed after retries');
+  }
+
+  /**
+   * Parse HTML response to extract company list
+   * The endpoint returns an HTML page with company links
+   */
+  private parseCompanyListHtml(html: string): CompanyStub[] {
+    const companies: CompanyStub[] = [];
+
+    // Pattern to match company links: /executive-search/vn/companies/{id}">Company Name</a>
+    const pattern = /<a[^>]*href="\/executive-search\/vn\/companies\/(\d+)"[^>]*>([^<]+)<\/a>/g;
+
+    let match;
+    const seenIds = new Set<string>();
+
+    while ((match = pattern.exec(html)) !== null) {
+      const companyId = match[1];
+      const fullName = match[2].trim();
+
+      // Skip duplicates (same company may appear multiple times in HTML)
+      if (seenIds.has(companyId)) {
+        continue;
+      }
+      seenIds.add(companyId);
+
+      // Parse name (format: "English Name / Japanese Name / Local Name")
+      const nameParts = fullName.split(/\s*\/\s*/);
+      const name = nameParts[0] || fullName;
+
+      // Extract region from the name or page context if possible
+      const region = this.extractRegionFromName(fullName);
+
+      companies.push({
+        companyId,
+        name,
+        region,
+        tags: [], // Tags will be populated when fetching details
+      });
+    }
+
+    return companies;
+  }
+
+  /**
+   * Extract region from company name if it contains region keywords
+   */
+  private extractRegionFromName(name: string): string | null {
+    const regionPatterns = ['南部', '北部', '中部', '東部', '西部', 'Ho Chi Minh', 'Hanoi', 'Da Nang'];
+    for (const region of regionPatterns) {
+      if (name.includes(region)) {
+        if (region === 'Ho Chi Minh') return '南部';
+        if (region === 'Hanoi') return '北部';
+        if (region === 'Da Nang') return '中部';
+        return region;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Get detailed company information
+   *
+   * Note: The JSON API does not include staff email addresses.
+   * We also fetch the HTML page to extract contact emails.
    *
    * @param companyId - Company ID to retrieve
    * @returns Full company details including offices and staff
@@ -326,11 +590,58 @@ export class CrmClient {
   async getCompanyDetail(companyId: string): Promise<CompanyDetail> {
     await this.ensureAuthenticated();
 
+    // Get JSON response for basic company data
     const response = await this.request<CrmCompanyDetailResponse>(
       `/companies/${companyId}`
     );
 
-    return this.mapCompanyDetailResponse(response);
+    const detail = this.mapCompanyDetailResponse(response);
+
+    // Also fetch HTML page to extract staff emails (not included in JSON API)
+    try {
+      const html = await this.requestHtml(`/companies/${companyId}`);
+      const staffEmails = this.extractEmailsFromHtml(html);
+
+      // If no contactEmail from JSON but found emails in HTML, use the first one
+      if (!detail.contactEmail && staffEmails.length > 0) {
+        detail.contactEmail = staffEmails[0];
+      }
+
+      // Store all found emails in staffs if empty
+      if (detail.staffs && detail.staffs.length === 0 && staffEmails.length > 0) {
+        detail.staffs = staffEmails.map((email, idx) => ({
+          staffId: `html-${idx}`,
+          name: email.split('@')[0], // Use email prefix as name
+          email,
+          phone: null,
+          department: null,
+          note: null,
+        }));
+      }
+    } catch {
+      // HTML fetch failed, continue with JSON data only
+    }
+
+    return detail;
+  }
+
+  /**
+   * Extract email addresses from HTML page
+   * Filters out system emails (careerlink.vn) and cleans up encoded characters
+   */
+  private extractEmailsFromHtml(html: string): string[] {
+    const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const allEmails = html.match(emailPattern) || [];
+
+    // Filter out system emails, clean up, and deduplicate
+    const cleanedEmails = allEmails
+      .map(email => email.replace(/^u003e/i, '')) // Remove HTML encoded '>'
+      .filter(email => !email.includes('careerlink.vn'))
+      .filter(email => !email.includes('example.com'))
+      .filter(email => email.includes('@')); // Ensure still valid
+
+    // Deduplicate
+    return [...new Set(cleanedEmails)];
   }
 
   /**
@@ -348,6 +659,86 @@ export class CrmClient {
     );
 
     return this.mapTimelineToContactHistory(companyId, response);
+  }
+
+/**
+   * Create a Tel Action (コールメモ) for a company
+   *
+   * @param companyId - Company ID
+   * @param staffName - Contact person name (e.g., "武井 順也")
+   * @param log - Action memo/notes
+   * @param place - Office name (optional, e.g., "日本本社")
+   * @param performedAt - When the action was performed (default: now)
+   * @returns Created action details
+   */
+  async createTelAction(
+    companyId: string,
+    staffName: string,
+    log: string,
+    place?: string,
+    performedAt?: Date
+  ): Promise<{ id: number; companyId: number; log: string; performedAt: string }> {
+    await this.ensureAuthenticated();
+
+    // Get fresh CSRF token from company page
+    const companyPageHtml = await this.requestHtml(`/companies/${companyId}`);
+    const csrfMatch = companyPageHtml.match(/<meta[^>]*name="csrf-token"[^>]*content="([^"]+)"/);
+    if (!csrfMatch) {
+      throw new AuthError('CSRF token not found on company page');
+    }
+    const csrfToken = csrfMatch[1];
+
+    // Build form data
+    const timestamp = performedAt
+      ? Math.floor(performedAt.getTime() / 1000)
+      : Math.floor(Date.now() / 1000);
+
+    const formData = new URLSearchParams();
+    formData.append('sales_tel_action[id]', 'new');
+    formData.append('sales_tel_action[company_id]', companyId);
+    formData.append('sales_tel_action[performed_at]', timestamp.toString());
+    formData.append('sales_tel_action[staff_name]', staffName);
+    formData.append('sales_tel_action[place]', place || '');
+    formData.append('sales_tel_action[add_as_new_office]', '');
+    formData.append('sales_tel_action[log]', log);
+
+    const url = `${this.baseUrl}/companies/${companyId}/sales_actions`;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Accept': 'application/json, text/javascript, */*; q=0.01',
+      'x-csrf-token': csrfToken,
+      'x-requested-with': 'XMLHttpRequest',
+    };
+
+    if (this.sessionCookies) {
+      headers['Cookie'] = this.sessionCookies;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData.toString(),
+    });
+
+    if (response.status === 201) {
+      const data = await response.json() as {
+        id: number;
+        company_id: number;
+        log: string;
+        performed_at: string;
+      };
+      return {
+        id: data.id,
+        companyId: data.company_id,
+        log: data.log,
+        performedAt: data.performed_at,
+      };
+    } else if (response.status === 422) {
+      throw new NetworkError('Failed to create tel action: validation error', 422);
+    } else {
+      throw new NetworkError(`Failed to create tel action: HTTP ${response.status}`, response.status);
+    }
   }
 
   /**
@@ -387,7 +778,10 @@ export class CrmClient {
       ...(options.headers as Record<string, string> || {}),
     };
 
-    if (this.sessionToken) {
+    // Use cookie-based auth if available, otherwise use token header
+    if (this.sessionCookies) {
+      headers['Cookie'] = this.sessionCookies;
+    } else if (this.sessionToken && this.sessionToken !== 'cookie-auth') {
       headers['X-Cl-Session-Admin'] = this.sessionToken;
     }
 
@@ -411,9 +805,10 @@ export class CrmClient {
           if (!this.hasAttemptedReauth) {
             this.hasAttemptedReauth = true;
             this.sessionToken = null;
+            this.sessionCookies = null;
             try {
               await this.login();
-              // Retry the request with new token
+              // Retry the request with new credentials
               return this.request<T>(path, options);
             } catch {
               throw new AuthError('Session expired and re-authentication failed');

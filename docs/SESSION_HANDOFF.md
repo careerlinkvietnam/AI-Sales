@@ -1,6 +1,6 @@
 # AI-Sales セッション引き継ぎドキュメント
 
-最終更新: 2026-01-27
+最終更新: 2026-01-28
 
 ---
 
@@ -15,7 +15,7 @@
 
 ---
 
-## 実装状況 (2026-01-27時点)
+## 実装状況 (2026-01-28時点)
 
 | Phase | 内容 | 状態 |
 |-------|------|------|
@@ -24,6 +24,10 @@
 | P2 | CandidateClient + PriorityScorer | ✅ 完了 |
 | P3-1〜P3-7 | A/Bテスト基盤・実験管理 | ✅ 完了 |
 | P4-1〜P4-16 | 運用自動化・安全機構 | ✅ 完了 |
+| - | Gmail OAuth連携 | ✅ 完了 |
+| - | Slack通知連携 | ✅ 完了 |
+| - | 企業処理ワークフロー | ✅ 完了 |
+| - | CRM sales_action作成 | ✅ 完了 |
 
 **全フェーズ実装完了**。テスト64ファイル、ソース81ファイル。
 
@@ -39,6 +43,16 @@ AI-Sales/
 │   ├── domain/        # 34 ドメインモジュール
 │   ├── data/          # NDJSON永続化層
 │   └── notifications/ # Webhook通知
+├── scripts/           # ユーティリティスクリプト
+│   ├── list_companies.ts         # タグで企業一覧取得
+│   ├── get_company_email.ts      # 企業メール取得
+│   ├── get_company_detail.ts     # 企業詳細取得
+│   ├── get_company_history.ts    # 連絡履歴取得
+│   ├── create_draft.ts           # Gmail下書きテスト
+│   ├── create_draft_and_notify.ts # 下書き作成+Slack通知
+│   ├── create_crm_action.ts      # CRMコールメモ登録
+│   ├── list_sent_emails.ts       # 送信済みメール一覧
+│   └── notify_slack.ts           # Slack通知テスト
 ├── tests/             # 64 テストファイル
 ├── config/            # 設定JSON (experiments, ops_schedule等)
 ├── docs/
@@ -65,6 +79,19 @@ npx ts-node src/cli/run_ops.ts approvals-run --actor "..." --reason "..."  # 対
 # テスト
 npm test                                      # 全テスト
 npm test -- tests/specific.test.ts            # 個別テスト
+
+# ユーティリティスクリプト（企業処理フロー）
+npx ts-node scripts/list_companies.ts "南部・1月連絡"       # Step1: 企業一覧取得
+npx ts-node scripts/get_company_email.ts 18493              # Step2: メール確認
+npx ts-node scripts/get_company_detail.ts 18493             # Step3: 企業詳細取得
+npx ts-node scripts/get_company_history.ts 18493            # Step4: 連絡履歴取得
+npx ts-node scripts/create_draft_and_notify.ts              # Step7-8: 下書き保存+Slack通知
+npx ts-node scripts/create_crm_action.ts 18493 "担当者名" "メモ" "オフィス"  # Step10: CRM登録
+
+# 個別テスト
+npx ts-node scripts/create_draft.ts             # Gmail下書きテスト
+npx ts-node scripts/notify_slack.ts             # Slack通知テスト
+npx ts-node scripts/list_sent_emails.ts         # 送信済みメール確認
 ```
 
 ---
@@ -77,6 +104,121 @@ npm test -- tests/specific.test.ts            # 個別テスト
 | `config/experiments.json` | A/B実験定義 |
 | `config/priority_rules.json` | 優先度スコアリングルール |
 | `.env` | 環境変数（secrets、コミット禁止） |
+| `scripts/notify_slack.ts` | Slack通知スクリプト |
+
+---
+
+## ビジネスルール
+
+### タグ選択ルール
+- **現在月のタグが最優先**: 1月なら「南部・1月連絡」、2月なら「南部・2月連絡」
+- `--tag`オプション省略時は自動的に現在月のタグを使用
+- デフォルト地域は「南部」（`--region`で変更可能）
+
+### 企業処理の完全ワークフロー（2026-01-28確定）
+
+```
+Step 1: 企業検索
+    ↓
+Step 2: 連絡先確認（メールあり？）
+    ↓ なければスキップ → 次の企業へ
+Step 3: 会社情報確認（URL、事業内容）
+    ↓
+Step 4: 連絡履歴確認（訪問・電話・メール）
+    ↓
+Step 5: メール内容決定（テンプレート選択）
+    ↓
+Step 6: ドラフト作成・確認
+    ↓
+Step 7: Gmail下書き保存
+    ↓
+Step 8: Slack通知（担当者へ）
+    ↓
+Step 9: 担当者がメール送信
+    ↓
+Step 10: CRM sales_action登録（コールメモ）
+```
+
+#### 各Stepの実行方法
+
+| Step | 内容 | 実行方法 |
+|------|------|----------|
+| 1 | 企業検索 | `npx ts-node scripts/list_companies.ts "南部・1月連絡"` |
+| 2 | 連絡先確認 | `npx ts-node scripts/get_company_email.ts {企業ID}` |
+| 3 | 会社情報確認 | `npx ts-node scripts/get_company_detail.ts {企業ID}` |
+| 4 | 連絡履歴確認 | `npx ts-node scripts/get_company_history.ts {企業ID}` |
+| 5 | メール内容決定 | `config/email_templates.json` 参照 |
+| 6 | ドラフト作成 | `scripts/create_draft_and_notify.ts` を編集 |
+| 7 | Gmail下書き保存 | `npx ts-node scripts/create_draft_and_notify.ts` |
+| 8 | Slack通知 | Step 7と同時に実行される |
+| 9 | メール送信 | 担当者がGmailで下書きを確認・送信 |
+| 10 | CRM登録 | `CrmClient.createTelAction()` または手動 |
+
+#### Step 10: CRM sales_action登録の詳細
+
+メール送信後、CRMにコールメモとして記録する。
+
+**プログラムから実行:**
+```typescript
+import { CrmClient } from './src/connectors/crm/CrmClient';
+
+const client = CrmClient.createFromEnv();
+
+await client.createTelAction(
+  '18454',                    // 会社ID
+  '武井 順也',                 // 対応者名（CRM上の担当者名）
+  '状況確認のメールを送信',     // メモ内容
+  '日本本社'                   // オフィス名（省略可）
+);
+```
+
+**必要な情報:**
+- 会社ID
+- 対応者名（メール送信先の担当者名）
+- メモ内容（何をしたか）
+- オフィス名（任意）
+
+**CRM上での確認:**
+- 会社ページのタイムラインに「コールメモ」として表示される
+- 作成者は `ai-sales@careerlink.vn` として記録される
+
+### 連絡先ルール
+- **メールアドレスがあれば送信対象**（代表メール`info@`等も可）
+- 担当者名がわかれば「〇〇様」
+- 担当者名がわからなければ「採用担当者様」
+- 連絡先の確認順序: `contactEmail` → `staffs[].email` → HTMLページから抽出
+
+### 企業確認フロー
+1. **会社URLを確認**: 事業内容・決算時期を把握
+2. **直近のやり取りを確認**: 訪問メモ・連絡履歴を読む
+3. **採用ニーズを把握**:
+   - ポジション、言語要件、スキル要件
+   - **NG条件を最優先で把握**（ミスマッチ防止のため最重要）
+4. **Next Actionを確認**: 前回のやり取りで決まった次のアクション
+
+### メール内容の判断
+- 企業の状況・Next Actionに応じてメール内容を決める
+- **候補者提案が適切なタイミングか判断する**
+  - 法人設立未確定、採用時期未定の場合 → フォローアップ/状況確認
+  - 具体的な採用ニーズあり → 候補者提案
+- **候補者提案の自動化: 留保**（現時点では未完了）
+
+### 基本メールテンプレート（5パターン）
+設定ファイル: `config/email_templates.json`
+
+| パターン | 用途 | 特徴 |
+|----------|------|------|
+| 1: status_check_with_pricing | 状況確認（料金案内付き） | 料金情報あり |
+| 2: post_call_service_intro | 電話後フォロー | 2サービス詳細、資料添付 |
+| 3: soft_reminder | リマインド（ソフト） | プレッシャーなし、思い出してもらう |
+| 4: simple_status_check | シンプル状況確認 | 最短、料金なし |
+| 5: status_check_with_service_names | 状況確認（サービス名） | サービス名のみ言及 |
+
+**選択ガイド:**
+- 電話後 → パターン2
+- 今すぐニーズなさそう → パターン3
+- 定期フォロー（料金案内） → パターン1
+- 定期フォロー（シンプル） → パターン4 or 5
 
 ---
 
@@ -105,8 +247,8 @@ npm test -- tests/specific.test.ts            # 個別テスト
 P4-16まで計画は完了。次の方向性候補：
 
 1. **本番運用準備**: CANDIDATE_MODE=real, ENABLE_AUTO_SEND=true
-2. **CRM書き戻し**: sales_action API連携
-3. **通知拡張**: Slack/Teams連携
+2. ~~**CRM書き戻し**: sales_action API連携~~ → ✅ 完了 (`CrmClient.createTelAction()`)
+3. ~~**通知拡張**: Slack/Teams連携~~ → ✅ Slack完了
 4. **可視化**: メトリクスダッシュボード
 
 ---
@@ -131,6 +273,49 @@ npx tsc --noEmit
 
 ## トラブルシューティング
 
+### CRM認証エラー / セッション切れ
+
+**症状**: `Session expired` または `Not a valid session`
+
+**原因**: Cookie管理またはログインフローの問題、またはセッションタイムアウト
+
+**重要**: セッションが切れた場合は、自動的に再ログインを行うこと。
+- CLIコマンド（`run_one_company.ts`等）は実行時に自動で再接続される
+- スクリプトで直接CRMにアクセスする場合は `scripts/get_company_email.ts` を参考に再ログイン処理を実装
+
+**対処**:
+1. `.env` に正しい環境変数を設定：
+   - `CRM_BASE_URL=https://www.careerlink.vn:1443/executive-search/vn`
+   - `CRM_AUTH_HOST=https://www.careerlink.vn:1443`
+   - `CRM_AUTH_PATH=/siankaan0421/login_check`
+   - `CRM_LOGIN_EMAIL` と `CRM_LOGIN_PASSWORD`
+2. 詳細は `docs/system_map.md` セクション7.5〜7.6参照
+
+**認証フロー（2026-01-27確認済み）**:
+1. GET `/siankaan0421/login` → CSRFトークンとCookie取得
+2. POST `/siankaan0421/login_check` → ログイン
+   - Content-Type: `application/x-www-form-urlencoded`
+   - Body: `_username=<email>&_password=<password>&authenticity_token=<CSRF>`
+3. 新しいCookieで古いCookieを上書き（重複回避）
+4. 以降のAPIリクエストにCookieを使用
+
+### API応答形式の注意
+
+- `/companies/tags`: **HTMLのみ**（JSONは406エラー）→ CrmClientがHTMLパースで対応
+- `/companies/{id}`: **JSON**で企業詳細取得可能（ただし担当者メールは含まれない）
+- `/timeline/companies/{id}`: 現在500エラーが発生する場合あり → 空履歴で続行
+
+### 担当者メールアドレスの取得
+
+**重要発見** (2026-01-27): JSON APIは担当者のメールアドレスを返さない。HTMLページには表示されている。
+
+**対応**: `getCompanyDetail`でJSONに加えてHTMLページも取得し、メールアドレスを正規表現で抽出。
+
+```typescript
+// HTMLからメールを抽出（careerlink.vnドメインは除外）
+const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+```
+
 ### TypeScriptエラー (RampPolicy関連)
 既知の問題。`src/domain/index.ts` のエクスポートエラー。機能には影響なし。
 
@@ -139,6 +324,122 @@ npx tsc --noEmit
 
 ### 環境変数未設定
 `.env.example` があれば参照。なければ `docs/runbook.md` セクション1参照。
+
+### Gmail OAuth設定
+
+Gmail下書き作成には OAuth2 認証が必要。
+
+**現在のGmailアカウント**: `sato@careerlink.vn`
+
+**必要な環境変数** (`.env`):
+```
+GMAIL_CLIENT_ID=xxxxx.apps.googleusercontent.com
+GMAIL_CLIENT_SECRET=GOCSPX-xxxxx
+GMAIL_REFRESH_TOKEN=1//xxxxx
+```
+
+**Gmailアカウント変更方法**:
+1. OAuth Playground (https://developers.google.com/oauthplayground) にアクセス
+2. 歯車 → 「Use your own OAuth credentials」にチェック
+3. 既存のClient ID/Secretを入力
+4. 「Input your own scopes」に `https://mail.google.com/` を入力
+5. 「Authorize APIs」→ **新しいアカウント**でログイン
+6. 新しいRefresh tokenを`.env`に設定
+
+**設定手順**:
+
+1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクト作成
+2. 「APIとサービス」→「ライブラリ」→ Gmail API を有効化
+3. 「APIとサービス」→「OAuth同意画面」を設定
+4. 「APIとサービス」→「認証情報」→ OAuth 2.0 クライアントID作成
+   - 種類: ウェブアプリケーション
+   - 承認済みリダイレクトURI: `https://developers.google.com/oauthplayground`
+5. [OAuth Playground](https://developers.google.com/oauthplayground) でリフレッシュトークン取得:
+   - 右上歯車 → 「Use your own OAuth credentials」にチェック
+   - Client ID と Client Secret を入力
+   - **重要**: 「Input your own scopes」に `https://mail.google.com/` を入力
+   - 「Authorize APIs」→ ログイン → 「Exchange authorization code for tokens」
+   - Refresh token をコピー
+
+**よくあるエラー**:
+- `unauthorized_client`: OAuth Playgroundで「Use your own OAuth credentials」がチェックされていない
+- `403 Missing access token`: スコープが間違っている（`gmail.addons`ではなく`mail.google.com`を使用）
+
+### Slack通知設定
+
+下書き作成時にSlackへ通知を送信。
+
+**必要な環境変数** (`.env`):
+```
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXXXX/XXXXX/XXXXX
+```
+
+**Webhook URL取得手順**:
+1. https://api.slack.com/apps でアプリ作成
+2. 「App Home」でBot Display Nameを設定（必須）
+3. 「Incoming Webhooks」を有効化
+4. 「Add New Webhook to Workspace」でチャンネル選択
+5. 生成されたWebhook URLをコピー
+
+**通知スクリプト使用方法**:
+```bash
+npx ts-node scripts/notify_slack.ts              # テスト送信
+npx ts-node scripts/create_draft_and_notify.ts   # 下書き作成+通知
+```
+
+### CRM sales_action作成（コールメモ）
+
+メール送信後のCRM記録用。`CrmClient.createTelAction()`でコールメモを作成。
+
+**使用方法**:
+```typescript
+import { CrmClient } from './src/connectors/crm/CrmClient';
+
+const client = CrmClient.createFromEnv();
+
+await client.createTelAction(
+  '18454',           // 会社ID
+  '武井 順也',        // 担当者名
+  'メールを送信',     // メモ
+  '日本本社'          // オフィス名（省略可）
+);
+```
+
+**APIフォーマット**:
+- Endpoint: `POST /executive-search/vn/companies/{id}/sales_actions`
+- Content-Type: `application/x-www-form-urlencoded`
+- 必要ヘッダー: `x-csrf-token`, `x-requested-with: XMLHttpRequest`
+- フィールド: `sales_tel_action[id]=new`, `sales_tel_action[company_id]`, `sales_tel_action[performed_at]` (Unix timestamp), `sales_tel_action[staff_name]`, `sales_tel_action[place]`, `sales_tel_action[log]`
+
+**注意**: `_hr_frontend_session` Cookieが必要。CrmClientは自動的にexecutive-searchページにアクセスして取得。
+
+**Slack通知フォーマット**:
+```
+📧 下書き作成完了
+
+企業: [企業名]
+企業ID: [ID]
+連絡先: ✅ 担当者個人メール / ⚠️ 代表メール（個人メールなし）
+
+📋 会社概要:
+• [業種・事業内容]
+• [特記事項]
+
+🎯 アクション:
+• [今回のアクション内容]
+• [使用テンプレート]
+
+📞 連絡履歴:
+• 訪問: [日付 担当者] または なし
+• 電話: [日付 担当者] または なし
+• メール: [日付 内容] または なし
+• 最終コンタクト: [日付（種別）] または なし（新規登録）
+
+宛先: [メールアドレス]
+宛名: [〇〇様]
+件名: [メール件名]
+CRM: [リンク]
+```
 
 ---
 
@@ -163,6 +464,14 @@ EOF
 - **最後のコミット**: `10b73fc` (P4-16: Interactive runner)
 - **ブランチ**: main
 - **リモート**: 未プッシュ（ローカルのみ）
+- **Gmailアカウント**: `sato@careerlink.vn`
+- **Slackチャンネル**: AI-Sales通知（Webhook設定済み）
+
+### 処理済み企業（2026-01-28）
+| 企業ID | 企業名 | 状態 |
+|--------|--------|------|
+| 18454 | アルプス システム インテグレーション株式会社 | ✅ 下書き作成済み |
+| 18493 | Supremetech Co.,Ltd | ✅ 下書き作成済み |
 
 ---
 
