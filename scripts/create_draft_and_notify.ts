@@ -140,28 +140,29 @@ async function createDraftAndNotify(info: DraftInfo) {
   return result;
 }
 
-// Execute for Mercuria Vietnam
+// Execute for NK LINKS VIET NAM (件名修正)
 const draftInfo: DraftInfo = {
-  companyId: '16983',
-  companyName: 'Mercuria (Vietnam) Co., LTD',
-  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/16983',
-  recipientEmail: 'aroon.t@mercuria.co.th',
-  recipientName: '百田様',
-  subject: 'ご挨拶【キャリアリンク佐藤】',
-  body: `Mercuria (Vietnam) Co., LTD
-百田様
+  companyId: '17264',
+  companyName: 'NK LINKS VIET NAM CO.,LTD',
+  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/17264',
+  recipientEmail: 'sato@tosmac-vietnam.com',
+  recipientName: '佐藤様',
+  subject: '採用活動のご状況確認【キャリアリンク佐藤】',
+  body: `NK LINKS VIET NAM CO.,LTD
+佐藤様
 
-お世話になっております。
+ご無沙汰しております。
+以前お伺いした際は大変お世話になりました。
 キャリアリンクの佐藤でございます。
 
-弊社ではコンサルタントやアシスタント、その他御社の業務内容に合った
-候補者のご紹介が可能です。
+弊社では日系企業様向けに、サービススタッフやアシスタント、
+その他御社の業務内容に合った候補者のご紹介を数多く行っております。
 
-もし採用についてお困りのことがあれば、
-お気軽にご相談ください。
+「こんな人材がいたら相談したい」
+「まずは市場の状況だけ知りたい」
 
-「まだ具体的ではないけど、ちょっと話を聞きたい」
-というご連絡も大歓迎です。
+といったご相談も歓迎しております。
+お気軽にご連絡いただければ幸いです。
 
 引き続きよろしくお願いいたします。
 
@@ -190,16 +191,17 @@ Tel: (024) 3519 0410
 ■タイ(Thai office)
 CareerLink Recruitment Thailand Co.,Ltd.
 Room 58S, 47 Sukhumvit 69 Rd., Phra Khanong Nuea, Watthana, Bangkok, Thailand`,
-  companySummary: `• 日系企業（コンサルタント）`,
-  actionSummary: `• 定期フォロー
-• テンプレート: パターンB（コンサルタント・アシスタント）`,
+  companySummary: `• 日系企業（サービス・不動産・旅行）
+• 佐藤・訪問済`,
+  actionSummary: `• 件名修正版
+• テンプレート: パターンA（サービススタッフ・アシスタント）`,
   contactHistory: {
-    visit: 'なし',
+    visit: '佐藤・訪問済（日付不明）',
     phone: 'なし',
     email: 'なし',
-    lastContact: '不明'
+    lastContact: '訪問履歴あり'
   },
-  hasPersonalEmail: false
+  hasPersonalEmail: true
 };
 
 createDraftAndNotify(draftInfo).then(() => {
