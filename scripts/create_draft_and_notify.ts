@@ -140,18 +140,18 @@ async function createDraftAndNotify(info: DraftInfo) {
   return result;
 }
 
-// Execute for Sankei Manufacturing
+// Execute for Vietnam Shell Stone
 const draftInfo: DraftInfo = {
-  companyId: '17991',
-  companyName: 'Sankei Manufacturing Vietnam Co., Ltd.',
-  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/17991',
-  recipientEmail: 'n-kubota@ngo-sankei.co.jp',
-  recipientName: '窪田様',
+  companyId: '17854',
+  companyName: 'Vietnam Shell Stone Co.,LTD',
+  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/17854',
+  recipientEmail: 'shellstonevietnam@gmail.com',
+  recipientName: '貝原様',
   subject: '採用状況のご確認【キャリアリンク佐藤】',
-  body: `株式会社三景
-窪田様
+  body: `Vietnam Shell Stone
+貝原様
 
-いつもお世話になっております。
+お世話になっております。
 キャリアリンクの佐藤でございます。
 
 その後、採用活動のご状況はいかがでしょうか。
@@ -186,18 +186,17 @@ Tel: (024) 3519 0410
 ■タイ(Thai office)
 CareerLink Recruitment Thailand Co.,Ltd.
 Room 58S, 47 Sukhumvit 69 Rd., Phra Khanong Nuea, Watthana, Bangkok, Thailand`,
-  companySummary: `• 日系製造業（株式会社三景）
-• 風呂敷、包装材製造
-• Hung Yen工場（北部）
-• 人材紹介契約済み`,
-  actionSummary: `• 定期フォロー（3ヶ月ぶり）
-• 前回: 2025-11-05 電話（窪田様）
+  companySummary: `• 日系企業（シェルストーン）
+• ホテル・レストラン向け業務用食器、備品
+• 商品企画、開発、生産管理、品質管理`,
+  actionSummary: `• 定期フォロー（5ヶ月ぶり）
+• 前回: 2025-08-14 Ms. Sato Mai
 • テンプレート: パターン4（シンプル状況確認）`,
   contactHistory: {
-    visit: '2025-03-27 Mr. Sumi',
-    phone: '2025-11-05 Ms. Sato Mai（窪田様）',
+    visit: 'なし',
+    phone: 'なし',
     email: 'なし',
-    lastContact: '2025-11-05（電話）'
+    lastContact: '2025-08-14（Ms. Sato Mai）'
   },
   hasPersonalEmail: true
 };
