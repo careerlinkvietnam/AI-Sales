@@ -305,6 +305,38 @@ await client.createTelAction(
      採用ご担当者様
      ```
 
+### メールフッター（署名）★変更禁止★
+
+全てのメールに以下のフッターを使用する。**絶対に変更しない。**
+
+```
+--
+『人をつなぎ、キャリアを創る』
+キャリアリンク (CareerLink Co., Ltd.)
+佐藤　舞 (Ms. Mai Sato)
+Mobile : (+84)091-140-1961
+Tel(日本人直通) : 028-3812-7983
+HR-Website : https://www.CareerLink.vn
+License : 31116/SLDTBXH-GPGH
+-----------------------------------
+ホーチミンヘッドオフィス(HCMC Head Office) :
+Room 302, 270–272 Cong Hoa Street, Tan Binh Ward, Ho Chi Minh City
+------------------------------------
+ハノイオフィス(HN Office) :
+Room 307, DMC Tower, 535 Kim Ma St, Giang Vo Ward, Ha Noi City
+Tel: (024) 3519 0410
+ダナンオフィス(DN Office)：
+8th Floor, ACB Da Nang Tower, 218 Bach Dang St, Hai Chau Ward, Da Nang City
+■日本(Japan Office)
+キャリアリンクアジア株式会社
+千葉県千葉市中央区栄町36－10　甲南アセット千葉中央ビル5F-D
+厚生労働大臣許可番号：12-ユ-300460
+登録支援許可番号：20登-003823
+■タイ(Thai office)
+CareerLink Recruitment Thailand Co.,Ltd.
+Room 58S, 47 Sukhumvit 69 Rd., Phra Khanong Nuea, Watthana, Bangkok, Thailand
+```
+
 ### 基本メールテンプレート（5パターン）
 設定ファイル: `config/email_templates.json`
 
