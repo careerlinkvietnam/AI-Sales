@@ -194,9 +194,11 @@ async function preCheck(companyId: string, targetMonth: number) {
   console.log('【★絶対厳守★】');
   console.log('❌ 下書き作成だけでタグ更新しない');
   console.log('❌ 古いメールを今回の送信と混同しない');
+  console.log('❌ エラーが出たのに次に進まない');
   console.log('✅ タグ更新は「メール送信確認後」のみ');
   console.log('✅ テンプレートはそのまま使わず、パーソナライズする');
   console.log('✅ 不明なケースは処理を止めてユーザーに確認');
+  console.log('✅ エラー発生時は即座に確認・修正（進んではいけない）');
   console.log('========================================');
 
   return { passed: allPassed, isSent };
