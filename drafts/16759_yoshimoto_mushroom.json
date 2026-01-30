@@ -1,0 +1,20 @@
+{
+  "companyId": "16759",
+  "companyName": "Yoshimoto Mushroom Việt Nam",
+  "recipientEmail": "minh.nguyen@ymush.com.vn",
+  "recipientName": "Minh様",
+  "template": "pattern_b",
+  "greeting": "visited_3to6months",
+  "jobTypes": "マッシュルーム生産管理、品質管理、農業技術者",
+  "customParagraph": "その後、採用活動のご状況はいかがでしょうか。",
+  "subject": "採用活動のご状況について【キャリアリンク佐藤】",
+  "companySummary": "• 芳源マッシュルームベトナム\n• マッシュルーム生産\n• Lam Dong・Loc Son IP",
+  "actionSummary": "• 定期フォロー（Minh様宛て）\n• 前回: 2025/08/14 採用状況確認メール\n• パターンB（シンプル）",
+  "contactHistory": {
+    "visit": "不明",
+    "phone": "不明",
+    "email": "2025/08/14 Minh様宛て採用状況確認",
+    "lastContact": "2025/08/14（メール）"
+  },
+  "hasPersonalEmail": true
+}

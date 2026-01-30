@@ -1,0 +1,20 @@
+{
+  "companyId": "16658",
+  "companyName": "Blended Asia Co., LTD",
+  "recipientEmail": "t.tatsumi@blended-asia.com",
+  "recipientName": "辰巳様",
+  "template": "pattern_b",
+  "greeting": "visited_over6months",
+  "industry": "コンサル",
+  "customParagraph": "その後、採用活動のご状況はいかがでしょうか。",
+  "subject": "採用活動のご状況について【キャリアリンク佐藤】",
+  "companySummary": "• Blended Asia / ブレンディッドアジア\n• HCMC Viettel Building",
+  "actionSummary": "• 定期フォロー（辰巳様宛て）\n• 前回: 2024/11/25 採用状況確認\n• パターンB（シンプル）",
+  "contactHistory": {
+    "visit": "不明",
+    "phone": "不明",
+    "email": "2024/11/25 辰巳様宛て採用状況確認",
+    "lastContact": "2024/11/25（メール）"
+  },
+  "hasPersonalEmail": true
+}

@@ -1,0 +1,20 @@
+{
+  "companyId": "16181",
+  "companyName": "KIREI NETWORK Co., Ltd",
+  "recipientEmail": "y.hanaoka@kirei-network.com",
+  "recipientName": "花岡様",
+  "template": "pattern_b",
+  "greeting": "visited_3to6months",
+  "industry": "サービス",
+  "customParagraph": "その後、採用活動のご状況はいかがでしょうか。",
+  "subject": "採用活動のご状況について【キャリアリンク佐藤】",
+  "companySummary": "• KIREI NETWORK\n• 美容室・スパエステ・医療・化粧品\n• HCMC District 3",
+  "actionSummary": "• 定期フォロー（花岡様宛て）\n• 前回: 2025/10/27 採用状況確認\n• パターンB（シンプル）",
+  "contactHistory": {
+    "visit": "佐藤訪問済",
+    "phone": "不明",
+    "email": "2025/10/27 花岡様宛て採用状況確認",
+    "lastContact": "2025/10/27（メール）"
+  },
+  "hasPersonalEmail": true
+}

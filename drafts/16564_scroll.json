@@ -1,0 +1,19 @@
+{
+  "companyId": "16564",
+  "companyName": "Scroll Vietnam Company Limited.",
+  "recipientEmail": "atsushi-izumi@scroll.vn",
+  "recipientName": "泉様",
+  "template": "pattern_c",
+  "greeting": "visited_1to3months",
+  "customParagraph": "その後、採用活動のご状況はいかがでしょうか。",
+  "subject": "採用活動のご状況について【キャリアリンク佐藤】",
+  "companySummary": "• Scroll Vietnam / スクロールベトナム\n• SSG Tower (Binh Thanh District)\n• 人材紹介契約済",
+  "actionSummary": "• 定期フォロー（泉様宛て）\n• 前回: 2025/10/30 採用状況確認\n• パターンC（契約済み）",
+  "contactHistory": {
+    "visit": "佐藤訪問済",
+    "phone": "不明",
+    "email": "2025/10/30 泉様宛て採用状況確認",
+    "lastContact": "2025/10/30（メール）"
+  },
+  "hasPersonalEmail": true
+}

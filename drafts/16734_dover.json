@@ -1,0 +1,20 @@
+{
+  "companyId": "16734",
+  "companyName": "Dover VN Co., LTD",
+  "recipientEmail": "son@doverseafoods.com",
+  "recipientName": "Mr. Son",
+  "template": "pattern_en",
+  "greeting": "visited_over6months",
+  "jobTypes": "quality control, production management, and seafood processing specialists",
+  "customParagraph": "I hope this email finds you well. I am reaching out to check on your current recruitment needs.",
+  "subject": "Our recruiting service 【Careerlink Sato】",
+  "companySummary": "• Dover Seafoods / ドーバーシーフード\n• 水産・食品加工\n• Ho Chi Minh",
+  "actionSummary": "• 定期フォロー（Mr. Son宛て・英語）\n• 前回: 2023/11/17\n• パターンEN（英語）",
+  "contactHistory": {
+    "visit": "不明",
+    "phone": "不明",
+    "email": "2023/11/17 Mr. Son宛て英語メール",
+    "lastContact": "2023/11/17（メール）"
+  },
+  "hasPersonalEmail": true
+}
