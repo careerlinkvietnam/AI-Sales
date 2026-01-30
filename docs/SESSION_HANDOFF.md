@@ -1053,12 +1053,12 @@ EOF
 | 18265 | Vina Takeuchi Co.,LTD | info@v-takeuchi.vn | ✅ メール送信済み | CRM Action 234633 |
 | 18072 | Vina Nide Co.,LTD | info@vinanide.com | ✅ メール送信済み | CRM Action 234635 |
 | 18061 | LJTrading Co.,LTD | info@lj-worldwide.com | ✅ メール送信済み | CRM Action 234637（企業サイトでメール発見） |
-| 17991 | Sankei Manufacturing Vietnam | n-kubota@ngo-sankei.co.jp | ✅ 下書き作成済み | CRM Action 234638（窪田様宛て） |
+| 17991 | Sankei Manufacturing Vietnam | n-kubota@ngo-sankei.co.jp | ✅ メール送信済み | CRM Action 234638（窪田様宛て）、タグ4月に更新済み |
 | 17854 | Vietnam Shell Stone Co.,LTD | shellstonevietnam@gmail.com | ✅ メール送信済み | CRM Action 234639（貝原様宛て） |
 | 17758 | Unifast Co.,Ltd | usukura@unifast.co.jp | ✅ メール送信済み | CRM Action 234640（臼倉様宛て、米良引き継ぎ） |
 | 17681 | Daiichi Corporation Vietnam | w-murayama@daiichi-j.co.jp | ✅ メール送信済み | CRM Action 234641（Murayama様宛て）、タグ4月に更新済み |
 | 17555 | Alpia Vietnam Co.,Ltd | satoshi-sato@jeicreate.net | ✅ メール送信済み | CRM Action 234642（企業サイトでメール発見） |
-| 17529 | One Asia Lawyers Vietnam | fubito.yamamoto@oneasia.legal | ✅ 下書き作成済み | CRM Action 234643（山本様宛て、求人受領中・パターンC） |
+| 17529 | One Asia Lawyers Vietnam | fubito.yamamoto@oneasia.legal | ✅ メール送信済み | CRM Action 234643（山本様宛て、求人受領中・パターンC）、タグ4月に更新済み |
 | 17478 | Matsusaka EDP Center Infotech Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234644（柴原様宛て、パターンA） |
 | 17420 | Arent Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234645（後藤様宛て、パターンB） |
 | 17290 | Aria Vietnam Inc | 要確認 | ✅ 下書き作成済み | CRM Action 234646（別府様宛て、パターンA） |
@@ -1069,8 +1069,8 @@ EOF
 | 17128 | TAKARA BELMONT COSMETICS | ui_akamine@takarabelmont.vn | ✅ メール送信済み | CRM Action 234652（赤嶺様宛て） |
 | 17029 | VINEPRO | info@vinect-production.com | ✅ メール送信済み | CRM Action 234653（採用担当者様宛て、パターンA・広告）、タグ4月に更新済み |
 | 16983 | Mercuria Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234654（百田様宛て、パターンB・コンサル） |
-| 16970 | TENNO ENGINEERING | ngan.dang_kayla@ce.com.vn | ✅ 下書き作成済み | CRM Action 234655（Ngan Dang様宛て・英語） |
-| 16908 | Maruyama Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234656（熱田様宛て、パターンB・訪問済み） |
+| 16970 | TENNO ENGINEERING | ngan.dang_kayla@ce.com.vn | ✅ メール送信済み | CRM Action 234655（Ngan Dang様宛て・英語）、タグ4月に更新済み |
+| 16908 | Maruyama Vietnam | atsutah@maruyama.co.jp | ✅ メール送信済み | CRM Action 234656（熱田様宛て）、タグ4月に更新済み |
 | 16836 | Monorevo Vietnam | 要確認 | ✅ 下書き作成済み | CRM登録エラー（要手動登録）細井様宛て、パターンA・IT |
 | 16065 | Tombow Manufacturing Asia | tanakaj@star.tombow.co.jp | ✅ 下書き作成済み | CRM Action 234810（田中様宛て、カスタムメール・製造） |
 
