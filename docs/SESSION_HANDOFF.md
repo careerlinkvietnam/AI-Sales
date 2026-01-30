@@ -1166,16 +1166,16 @@ EOF
 | 16983 | Mercuria Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234654（百田様宛て、パターンB・コンサル） |
 | 16970 | TENNO ENGINEERING | ngan.dang_kayla@ce.com.vn | ✅ メール送信済み | CRM Action 234655（Ngan Dang様宛て・英語）、タグ4月に更新済み |
 | 16908 | Maruyama Vietnam | atsutah@maruyama.co.jp | ✅ メール送信済み | CRM Action 234656（熱田様宛て）、タグ4月に更新済み |
-| 16836 | Monorevo Vietnam | 要確認 | ✅ 下書き作成済み | CRM登録エラー（要手動登録）細井様宛て、パターンA・IT |
+| 16836 | Monorevo Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234870（細井様宛て、パターンA・IT） |
 | 16065 | Tombow Manufacturing Asia | tanakaj@star.tombow.co.jp | ✅ 下書き作成済み | CRM Action 234810（田中様宛て、カスタムメール・製造） |
 | 16775 | Matsumoto Precision Vietnam | a-sekiguchi@matsumoto-pre.co.jp | ✅ メール送信済み | 2025/11/17送信確認、タグ4月に更新済み（関口様宛て） |
 | 16759 | Yoshimoto Mushroom Vietnam | minh.nguyen@ymush.com.vn | ✅ 下書き作成済み | CRM Action 234835（Minh様宛て、パターンB・マッシュルーム） |
 | 16734 | Dover VN | son@doverseafoods.com | ✅ 下書き作成済み | CRM Action 234836（Mr. Son宛て、パターンEN・水産） |
-| 16725 | MMK Vietnam | thaolinh-nguyen@mmknet.com | ✅ 下書き作成済み | CRM登録エラー（要手動登録）Thao Linh様宛て・英語 |
+| 16725 | MMK Vietnam | thaolinh-nguyen@mmknet.com | ✅ 下書き作成済み | CRM Action 234868（Thao Linh様宛て・英語） |
 | 16658 | Blended Asia | t.tatsumi@blended-asia.com | ✅ 下書き作成済み | CRM Action 234838（辰巳様宛て、パターンB・コンサル） |
 | 16564 | Scroll Vietnam | atsushi-izumi@scroll.vn | ✅ 下書き作成済み | CRM Action 234839（泉様宛て、パターンC・契約済み） |
 | 16353 | Zuno Vietnam | komatsu@zuno.tv | ⏭️ スキップ | 2025/11/11連絡済み（3ヶ月以内）、タグ4月に更新済み |
-| 16181 | KIREI NETWORK | y.hanaoka@kirei-network.com | ✅ 下書き作成済み | CRM登録エラー（要手動登録）花岡様宛て、パターンB・サービス |
+| 16181 | KIREI NETWORK | y.hanaoka@kirei-network.com | ✅ 下書き作成済み | CRM Action 234871（花岡様宛て、パターンB・サービス） |
 | 16034 | TAGGER | miyamoto@tagger-vn.com | ✅ 下書き作成済み | CRM Action 234844（宮本様宛て、パターンB・広告） |
 | 15366 | AMETHYST MEDICAL VIETNAM | ysugioka@amethyst.co.jp | ⏭️ スキップ | 求人受領中（2026/01/30連絡中）、タグ4月に更新済み |
 | 15353 | SHOCHIKU | satoru_kamiyama@shochiku.co.jp | ✅ 下書き作成済み | CRM Action 234845（上山様宛て、パターンFirst・初回） |
