@@ -1181,6 +1181,10 @@ EOF
 | 15348 | TOTAI | yuki_to@totai.com | ⏭️ スキップ | 2025/12/12連絡済み（3ヶ月以内）、タグ4月に更新済み |
 | 15335 | IBUKI INVESTMENT | info@ibuki.vn | ⏭️ スキップ | 2026/01/08連絡済み（3ヶ月以内）、タグ4月に更新済み |
 | 15333 | CANVAS.ASIA | s.katayama@canvas-works.asia | ✅ 下書き作成済み | CRM Action 234846（片山様宛て、パターンVisited・訪問後定期連絡） |
+| 15268 | JCV ENGINEERING | jcvkhan@jcv.vn | ⏭️ スキップ | 2025/11/28連絡済み（3ヶ月以内）、タグ4月に更新済み |
+| 15244 | NIPPON INTERIA | contact@noithatnhatban.vn | ✅ 下書き作成済み | CRM Action 234847（採用担当宛て、パターンEN・インテリア） |
+| 15235 | AICHI Tokei Denki | ta-kikuchi@inet1.aichitokei.co.jp | ⏭️ スキップ | 2025/12/12連絡済み（3ヶ月以内）、タグ4月に更新済み |
+| 15231 | Hokuetsu Corporation | yoshiharu.arai@hokuetsucorp.com.vn | ✅ 下書き作成済み | CRM Action 234848（荒井様宛て、パターンFirst・初回） |
 
 ### 未処理企業（次回継続）
 | 企業ID | 企業名 | 備考 |

@@ -1,0 +1,17 @@
+{
+  "companyId": "15231",
+  "companyName": "Hokuetsu Corporation Ho Chi Minh City Representative Office",
+  "recipientEmail": "yoshiharu.arai@hokuetsucorp.com.vn",
+  "recipientName": "荒井様",
+  "template": "pattern_first",
+  "subject": "ご挨拶【キャリアリンク佐藤】",
+  "companySummary": "• 北越コーポレーション ホーチミン駐在事務所\n• HCMC Agrex Tower (District 1)",
+  "actionSummary": "• 初回コンタクト（荒井様宛て）\n• 送信履歴なし\n• パターンFirst（ファーストコンタクト）",
+  "contactHistory": {
+    "visit": "坂田訪問済",
+    "phone": "不明",
+    "email": "送信履歴なし",
+    "lastContact": "なし（初回）"
+  },
+  "hasPersonalEmail": true
+}
