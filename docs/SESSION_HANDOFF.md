@@ -1185,6 +1185,8 @@ EOF
 | 15244 | NIPPON INTERIA | contact@noithatnhatban.vn | ✅ 下書き作成済み | CRM Action 234847（採用担当宛て、パターンEN・インテリア） |
 | 15235 | AICHI Tokei Denki | ta-kikuchi@inet1.aichitokei.co.jp | ⏭️ スキップ | 2025/12/12連絡済み（3ヶ月以内）、タグ4月に更新済み |
 | 15231 | Hokuetsu Corporation | yoshiharu.arai@hokuetsucorp.com.vn | ✅ 下書き作成済み | CRM Action 234848（荒井様宛て、パターンFirst・初回） |
+| 15189 | OG Trading Vietnam | icchy@ogvnm.com | ✅ 下書き作成済み | CRM Action 234849（橋本様宛て、パターンB・化学） |
+| 15073 | UniCARE Atalian Vietnam | contact.vn@atalianworld.com | ✅ 下書き作成済み | CRM Action登録エラー（ご担当者様宛て、パターンFirst・初回） |
 
 ### 未処理企業（次回継続）
 | 企業ID | 企業名 | 備考 |

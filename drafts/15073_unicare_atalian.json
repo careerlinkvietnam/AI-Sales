@@ -1,0 +1,17 @@
+{
+  "companyId": "15073",
+  "companyName": "UniCARE Atalian Vietnam",
+  "recipientEmail": "contact.vn@atalianworld.com",
+  "recipientName": "ご担当者様",
+  "template": "pattern_first",
+  "subject": "ご挨拶【キャリアリンク佐藤】",
+  "companySummary": "• UniCARE Atalian Vietnam\n• 施設管理・ファシリティサービス\n• HCMC, Da Nang",
+  "actionSummary": "• 初回コンタクト（代表宛て）\n• 送信履歴なし\n• パターンFirst（ファーストコンタクト）",
+  "contactHistory": {
+    "visit": "不明",
+    "phone": "不明",
+    "email": "送信履歴なし",
+    "lastContact": "なし（初回）"
+  },
+  "hasPersonalEmail": false
+}
