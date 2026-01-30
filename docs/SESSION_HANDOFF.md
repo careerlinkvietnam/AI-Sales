@@ -726,7 +726,7 @@ EOF
 | 17264 | NK LINKS VIET NAM | sato@tosmac-vietnam.com | ✅ メール送信済み | CRM Action 234648（佐藤様宛て、パターンA・サービス） |
 | 17255 | AVT INTERNATIONAL JSC | hello@avt.com.vn | ✅ 下書き作成済み | CRM Action 234649（採用担当者様宛て、パターンB・建設） |
 | 17158 | Capco Vietnam | imazu01@central-auto.co.jp | ✅ メール送信済み | CRM Action 234651（今津様宛て、パターンA・訪問済み） |
-| 17128 | TAKARA BELMONT COSMETICS | ui_akamine@takarabelmont.vn | ✅ 下書き作成済み | CRM Action 234652（赤嶺様宛て、パターンB・製造） |
+| 17128 | TAKARA BELMONT COSMETICS | ui_akamine@takarabelmont.vn | ✅ メール送信済み | CRM Action 234652（赤嶺様宛て） |
 | 17029 | VINEPRO | info@vinect-production.com | ✅ メール送信済み | CRM Action 234653（採用担当者様宛て、パターンA・広告） |
 | 16983 | Mercuria Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234654（百田様宛て、パターンB・コンサル） |
 | 16970 | TENNO ENGINEERING | 要確認 | ✅ 下書き作成済み | CRM Action 234655（採用担当者様宛て、パターンA・製造） |
