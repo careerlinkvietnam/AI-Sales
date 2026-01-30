@@ -49,8 +49,7 @@ AI-Sales/
 │   ├── get_company_email.ts      # 企業メール取得
 │   ├── get_company_detail.ts     # 企業詳細取得
 │   ├── get_company_history.ts    # 連絡履歴取得
-│   ├── create_draft.ts           # Gmail下書きテスト
-│   ├── create_draft_and_notify.ts # 下書き作成+Slack通知（ログ保存）
+│   ├── create_email_draft.ts     # 下書き作成+Slack通知（JSONファイル入力）
 │   ├── create_crm_action.ts      # CRMコールメモ登録
 │   ├── list_sent_emails.ts       # 送信済みメール一覧
 │   ├── list_slack_notifications.ts # Slack通知履歴確認
@@ -91,12 +90,12 @@ npx ts-node scripts/list_companies.ts "南部・1月連絡"       # Step1: 企�
 npx ts-node scripts/get_company_email.ts 18493              # Step2: メール確認
 npx ts-node scripts/get_company_detail.ts 18493             # Step3: 企業詳細取得
 npx ts-node scripts/get_company_history.ts 18493            # Step4: 連絡履歴取得
-npx ts-node scripts/create_draft_and_notify.ts              # Step7-8: 下書き保存+Slack通知
+npx tsx scripts/create_email_draft.ts ./drafts/会社ID.json  # Step7-8: 下書き保存+Slack通知
 npx ts-node scripts/create_crm_action.ts 18493 "担当者名" "メモ" "オフィス"  # Step10-A: CRM登録
 npx tsx scripts/update_month_tag.ts 18493                                    # Step10-C: タグ更新
 
 # 個別テスト
-npx ts-node scripts/create_draft.ts             # Gmail下書きテスト
+npx tsx scripts/create_email_draft.ts           # 下書き作成（JSON入力必須）
 npx ts-node scripts/notify_slack.ts             # Slack通知テスト
 npx ts-node scripts/list_sent_emails.ts         # 送信済みメール確認
 ```
@@ -234,6 +233,36 @@ npx ts-node scripts/list_sent_emails.ts         # 送信済みメール確認
 - 履歴: 「Tan Vanさんへ英語でメール送信」
 - 対応: hello@avt.com.vn ではなく tan.van@avt.com.vn に英語で送信
 
+#### ルール14-B: 過去のメール内容を確認し、文脈に沿ったメールを作成
+メール作成前に、**Gmailの送信履歴で過去のメール内容を確認**し、文脈に沿った返信を作成する。
+
+**手順:**
+1. **送信履歴を検索**
+   ```bash
+   npx tsx scripts/search_sent_to.ts "@ドメイン名"
+   ```
+
+2. **過去のメール内容を確認**
+   - 何を提案したか（例: 金型エンジニア、営業職など）
+   - どのような話をしたか（例: 採用計画、市場調査など）
+   - 相手の反応・状況（例: 検討中、見送り、採用決定など）
+
+3. **カスタム段落を作成**
+   - 前回の内容を踏まえた文を作成
+   - 例: 「前回10月に金型エンジニア（日本語話者）をご提案させていただきましたが、その後いかがでしょうか。」
+
+4. **テンプレート + カスタム段落でメール作成**
+   - JSONファイルに `customParagraph` として記載
+   - スクリプトで下書き作成
+
+**悪い例:**
+- 過去に金型エンジニアを提案したのに「営業職のご紹介が可能です」と書く
+- 前回訪問したのに「初めてご連絡いたします」と書く
+
+**良い例:**
+- 「前回10月に金型エンジニアをご提案しましたが、その後いかがでしょうか」
+- 「先日のご訪問ではお時間をいただきありがとうございました」
+
 #### ルール15: 求人受領中の企業はスキップ
 - 「求人受領中」タグがある企業は、月タグがあっても**メール作成不要**
 - すでにアクティブな取引があるため、定期フォローメールは不要
@@ -338,9 +367,9 @@ Step 10: CRM sales_action登録（コールメモ）★許可必要
 | 2 | 連絡先確認 | `npx ts-node scripts/get_company_email.ts {企業ID}` |
 | 3 | 会社情報確認 | `npx ts-node scripts/get_company_detail.ts {企業ID}` |
 | 4 | 連絡履歴確認 | `npx ts-node scripts/get_company_history.ts {企業ID}` |
-| 5 | メール内容決定 | `config/email_templates.json` 参照 |
-| 6 | ドラフト作成 | `scripts/create_draft_and_notify.ts` を編集 |
-| 7 | Gmail下書き保存 | `npx ts-node scripts/create_draft_and_notify.ts` |
+| 5 | メール内容決定 | 過去メール確認 → テンプレート選択 → カスタム段落作成 |
+| 6 | JSONファイル作成 | `drafts/企業ID_企業名.json` を作成 |
+| 7 | Gmail下書き保存 | `npx tsx scripts/create_email_draft.ts ./drafts/xxx.json` |
 | 8 | Slack通知 | Step 7と同時に実行される |
 | 9 | メール送信 | 担当者がGmailで下書きを確認・送信 |
 | 10 | CRM登録 | `CrmClient.createTelAction()` または手動 |
@@ -759,8 +788,8 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXXXX/XXXXX/XXXXX
 
 **通知スクリプト使用方法**:
 ```bash
-npx ts-node scripts/notify_slack.ts              # テスト送信
-npx ts-node scripts/create_draft_and_notify.ts   # 下書き作成+通知
+npx ts-node scripts/notify_slack.ts                        # テスト送信
+npx tsx scripts/create_email_draft.ts ./drafts/xxx.json    # 下書き作成+通知（JSON入力）
 ```
 
 ### CRM sales_action作成（コールメモ）

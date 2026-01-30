@@ -1,0 +1,17 @@
+{
+  "companyId": "16065",
+  "companyName": "Tombow Manufacturing Asia Co., Ltd.",
+  "recipientEmail": "onoderas@tombow-tma.com.vn",
+  "recipientName": "小野寺様",
+  "template": "past_job_followup_ja",
+  "customParagraph": "前回10月に金型エンジニア（日本語話者）をご提案させていただきましたが、その後いかがでしょうか。",
+  "companySummary": "• トンボ鉛筆グループ製造会社\n• 金型・組み立て\n• Dong Nai・Amata IP",
+  "actionSummary": "• 過去求人フォロー\n• 前回: 2025/10/08 金型エンジニア提案",
+  "contactHistory": {
+    "visit": "佐藤訪問済",
+    "phone": "不明",
+    "email": "2025/10/08 金型エンジニア提案",
+    "lastContact": "2025/10/08（メール）"
+  },
+  "hasPersonalEmail": true
+}
