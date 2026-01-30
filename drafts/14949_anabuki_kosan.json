@@ -1,0 +1,17 @@
+{
+  "companyId": "14949",
+  "companyName": "Representative Office of Anabuki Kosan INC in Ho Chi Minh City",
+  "recipientEmail": "k-kurahashi@anabuki-kosan.co.jp",
+  "recipientName": "倉橋様",
+  "template": "pattern_visited",
+  "subject": "採用活動のご状況について【キャリアリンク佐藤】",
+  "companySummary": "• 穴吹興産 ホーチミン駐在事務所\n• 建設・デベロッパー\n• HCMC District 1 (Vincom Center)",
+  "actionSummary": "• 定期フォロー（倉橋様宛て）\n• 前回: 米良・佐藤訪問済\n• パターンVisited（訪問後定期連絡）",
+  "contactHistory": {
+    "visit": "米良・佐藤訪問済",
+    "phone": "不明",
+    "email": "送信履歴なし",
+    "lastContact": "訪問済（日付不明）"
+  },
+  "hasPersonalEmail": true
+}
