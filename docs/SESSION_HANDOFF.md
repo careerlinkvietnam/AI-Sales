@@ -1198,6 +1198,7 @@ EOF
 | 14611 | Goshoku Vietnam | maiduytai@goshoku.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（Mr. Mai宛て、パターンEN・食品） |
 | 14505 | TIROL CHOCO VIETNAM | t.suga@tirol-choco.com | ✅ 下書き作成済み | CRM Action登録エラー（菅様宛て、パターンVisited・食品） |
 | 14447 | Uchida Shoji Vietnam | m.kitahora@uchida-shoji.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（北洞様宛て、パターンVisited・建設資材） |
+| 14361 | FAST RETAILING Vietnam | ayako.iyama@fastretailing.com | ✅ 下書き作成済み | CRM Action登録エラー（井山様宛て、パターンVisited・アパレル） |
 
 ### 未処理企業（次回継続）
 | 企業ID | 企業名 | 備考 |
