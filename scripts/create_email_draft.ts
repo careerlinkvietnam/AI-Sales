@@ -183,9 +183,9 @@ interface EmailDraftInput {
 // メール本文生成
 // ========================================
 
-function getGreeting(type: GreetingType, recipientName: string, isEnglish: boolean): string {
+function getGreeting(type: GreetingType, companyName: string, recipientName: string, isEnglish: boolean): string {
   if (isEnglish) {
-    return `Dear ${recipientName},\n\n`;
+    return `${companyName}\nDear ${recipientName},\n\n`;
   }
 
   const greetings: Record<GreetingType, string> = {
@@ -197,7 +197,8 @@ function getGreeting(type: GreetingType, recipientName: string, isEnglish: boole
     'visited_unknown': 'ご無沙汰しております。以前お伺いした際は大変お世話になりました。'
   };
 
-  return `${recipientName}\n\n${greetings[type]}\nキャリアリンクの佐藤でございます。\n\n`;
+  // 会社名 + 担当者名 + 挨拶（ルール14-C準拠）
+  return `${companyName}\n${recipientName}\n\n${greetings[type]}\nキャリアリンクの佐藤でございます。\n\n`;
 }
 
 function getJobTypes(input: EmailDraftInput): string {
@@ -264,7 +265,7 @@ function generateEmailBody(input: EmailDraftInput): string {
 
   // 挨拶
   const greetingType = input.greeting || 'standard';
-  const greeting = getGreeting(greetingType, input.recipientName, isEnglish);
+  const greeting = getGreeting(greetingType, input.companyName, input.recipientName, isEnglish);
 
   // カスタム段落（あれば）
   const customSection = input.customParagraph
