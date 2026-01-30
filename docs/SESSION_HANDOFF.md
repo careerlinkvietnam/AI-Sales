@@ -438,6 +438,14 @@ CRM: [URL]
 - **3ヶ月以内に連絡済み → スキップ**
 - **3ヶ月以上経過 → メール送信対象**
 
+#### ルール16-B: 求人受領タグがなくても3ヶ月以内連絡済みはスキップ
+- Gmail送信履歴で最終連絡日を確認
+- **3ヶ月以内に連絡済み → スキップ**（タグの有無に関わらず）
+- スキップ時の処理:
+  1. Slackにスキップ通知を送信（最終連絡日を含む）
+  2. タグを3ヶ月先に更新
+  3. SESSION_HANDOFF.mdに記録
+
 **確認方法:**
 ```bash
 npx tsx scripts/search_sent_to.ts "to:@ドメイン"
@@ -491,7 +499,10 @@ npx tsx scripts/pre_check.ts <企業ID> 1
 - 全件をリスト化してから、上から順番に処理
 - 1件処理したら次へ進む（飛ばさない）
 - 処理済み・スキップ済みも含めて全件確認する
-- SESSION_HANDOFF.mdに処理状況を記録
+- **★重要★ 1件処理するごとにSESSION_HANDOFF.mdを更新**
+  - 再処理を防ぐため、こまめに管理簿を整理する
+  - スキップした企業も理由を記録
+  - タグ更新した場合は更新後のタグを記録
 
 ---
 
@@ -1103,6 +1114,7 @@ EOF
 | 16908 | Maruyama Vietnam | atsutah@maruyama.co.jp | ✅ メール送信済み | CRM Action 234656（熱田様宛て）、タグ4月に更新済み |
 | 16836 | Monorevo Vietnam | 要確認 | ✅ 下書き作成済み | CRM登録エラー（要手動登録）細井様宛て、パターンA・IT |
 | 16065 | Tombow Manufacturing Asia | tanakaj@star.tombow.co.jp | ✅ 下書き作成済み | CRM Action 234810（田中様宛て、カスタムメール・製造） |
+| 16775 | Matsumoto Precision Vietnam | a-sekiguchi@matsumoto-pre.co.jp | ✅ メール送信済み | 2025/11/17送信確認、タグ4月に更新済み（関口様宛て） |
 
 ### 未処理企業（次回継続）
 | 企業ID | 企業名 | 備考 |
