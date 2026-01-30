@@ -698,7 +698,7 @@ export class CrmClient {
     formData.append('sales_tel_action[company_id]', companyId);
     formData.append('sales_tel_action[performed_at]', timestamp.toString());
     formData.append('sales_tel_action[staff_name]', staffName);
-    formData.append('sales_tel_action[place]', place || '');
+    formData.append('sales_tel_action[place]', place || 'Office');  // CRM API now requires place
     formData.append('sales_tel_action[add_as_new_office]', '');
     formData.append('sales_tel_action[log]', log);
 
@@ -780,7 +780,7 @@ export class CrmClient {
     formData.append('sales_tel_action[company_id]', companyId);
     formData.append('sales_tel_action[performed_at]', timestamp.toString());
     formData.append('sales_tel_action[staff_name]', staffName);
-    formData.append('sales_tel_action[place]', place || '');
+    formData.append('sales_tel_action[place]', place || 'Office');  // CRM API now requires place
     formData.append('sales_tel_action[add_as_new_office]', '');
     formData.append('sales_tel_action[log]', log);
 
