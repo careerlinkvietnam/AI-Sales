@@ -179,14 +179,25 @@ async function preCheck(companyId: string, targetMonth: number) {
   console.log('========================================');
 
   // ★ルール確認リマインダー★
-  console.log('\n📋 処理前ルール確認:');
-  console.log('----------------------------------------');
-  console.log('1. Gmail送信履歴を確認 → 3ヶ月以内ならスキップ');
+  console.log('\n📋 処理前ルール確認（必読）:');
+  console.log('========================================');
+  console.log('【確認事項】');
+  console.log('□ CRMで実際のタグを確認したか？（検索結果を鵜呑みにしない）');
+  console.log('□ Gmail送信履歴を確認したか？（3ヶ月以内→スキップ）');
+  console.log('□ SESSION_HANDOFF.mdで処理済みか確認したか？');
+  console.log('');
+  console.log('【処理フロー】');
+  console.log('1. Gmail履歴確認 → 3ヶ月以内ならスキップ（タグ更新＋Slack通知）');
   console.log('2. 下書き作成 → Slack通知 → CRM登録');
-  console.log('3. ★タグ更新は「メール送信確認後」のみ★');
-  console.log('   下書き作成だけではタグ更新しない！');
-  console.log('4. SESSION_HANDOFF.mdに処理状況を記録');
-  console.log('----------------------------------------');
+  console.log('3. SESSION_HANDOFF.mdに記録（下書き作成済み）');
+  console.log('');
+  console.log('【★絶対厳守★】');
+  console.log('❌ 下書き作成だけでタグ更新しない');
+  console.log('❌ 古いメールを今回の送信と混同しない');
+  console.log('✅ タグ更新は「メール送信確認後」のみ');
+  console.log('✅ テンプレートはそのまま使わず、パーソナライズする');
+  console.log('✅ 不明なケースは処理を止めてユーザーに確認');
+  console.log('========================================');
 
   return { passed: allPassed, isSent };
 }
