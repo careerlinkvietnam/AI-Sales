@@ -1187,19 +1187,19 @@ EOF
 | 15235 | AICHI Tokei Denki | ta-kikuchi@inet1.aichitokei.co.jp | ⏭️ スキップ | 2025/12/12連絡済み（3ヶ月以内）、タグ4月に更新済み |
 | 15231 | Hokuetsu Corporation | yoshiharu.arai@hokuetsucorp.com.vn | ✅ 下書き作成済み | CRM Action 234848（荒井様宛て、パターンFirst・初回） |
 | 15189 | OG Trading Vietnam | icchy@ogvnm.com | ✅ 下書き作成済み | CRM Action 234849（橋本様宛て、パターンB・化学） |
-| 15073 | UniCARE Atalian Vietnam | contact.vn@atalianworld.com | ✅ 下書き作成済み | CRM Action登録エラー（ご担当者様宛て、パターンFirst・初回） |
-| 15026 | HR Anabuki Vietnam | hirai@crie.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（平井様宛て、パターンVisited・訪問後定期連絡） |
-| 14971 | Boken Quality Evaluation | shinko@boken.or.jp | ✅ 下書き作成済み | CRM Action登録エラー（信耕様宛て、パターンC・契約済み） |
-| 14949 | Anabuki Kosan HCMC | k-kurahashi@anabuki-kosan.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（倉橋様宛て、パターンVisited・訪問後定期連絡） |
-| 14913 | Seiwa Kaiun | nrtk-inazawa@seiwa-kaiun.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（稲澤様宛て、パターンVisited・物流） |
-| 14845 | Showa Vietnam | showa.vn@shou-wa.com | ✅ 下書き作成済み | CRM Action登録エラー（Nishizawa様宛て、パターンB・縫製） |
-| 14721 | Environment Space Engineering | t-fujii@kankyo-set.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（藤井様宛て、パターンVisited・設計） |
-| 14702 | BITEC GLOBAL VIETNAM | muroi@bitecglobal.com | ✅ 下書き作成済み | CRM Action登録エラー（室井様宛て、パターンC・契約済み） |
-| 14654 | OTSUKA TECHNO VIETNAM | Tsutsui.shigeru@otsuka.jp | ✅ 下書き作成済み | CRM Action登録エラー（筒井様宛て、パターンVisited・医療） |
-| 14611 | Goshoku Vietnam | maiduytai@goshoku.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（Mr. Mai宛て、パターンEN・食品） |
-| 14505 | TIROL CHOCO VIETNAM | t.suga@tirol-choco.com | ✅ 下書き作成済み | CRM Action登録エラー（菅様宛て、パターンVisited・食品） |
-| 14447 | Uchida Shoji Vietnam | m.kitahora@uchida-shoji.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（北洞様宛て、パターンVisited・建設資材） |
-| 14361 | FAST RETAILING Vietnam | ayako.iyama@fastretailing.com | ✅ 下書き作成済み | CRM Action登録エラー（井山様宛て、パターンVisited・アパレル） |
+| 15073 | UniCARE Atalian Vietnam | contact.vn@atalianworld.com | ✅ 下書き作成済み | CRM Action 234855（ご担当者様宛て、パターンFirst・初回） |
+| 15026 | HR Anabuki Vietnam | hirai@crie.co.jp | ✅ 下書き作成済み | CRM Action 234856（平井様宛て、パターンVisited・訪問後定期連絡） |
+| 14971 | Boken Quality Evaluation | shinko@boken.or.jp | ✅ 下書き作成済み | CRM Action 234857（信耕様宛て、パターンC・契約済み） |
+| 14949 | Anabuki Kosan HCMC | k-kurahashi@anabuki-kosan.co.jp | ✅ 下書き作成済み | CRM Action 234858（倉橋様宛て、パターンVisited・訪問後定期連絡） |
+| 14913 | Seiwa Kaiun | nrtk-inazawa@seiwa-kaiun.co.jp | ✅ 下書き作成済み | CRM Action 234859（稲澤様宛て、パターンVisited・物流） |
+| 14845 | Showa Vietnam | showa.vn@shou-wa.com | ✅ 下書き作成済み | CRM Action 234860（Nishizawa様宛て、パターンB・縫製） |
+| 14721 | Environment Space Engineering | t-fujii@kankyo-set.co.jp | ✅ 下書き作成済み | CRM Action 234861（藤井様宛て、パターンVisited・設計） |
+| 14702 | BITEC GLOBAL VIETNAM | muroi@bitecglobal.com | ✅ 下書き作成済み | CRM Action 234862（室井様宛て、パターンC・契約済み） |
+| 14654 | OTSUKA TECHNO VIETNAM | Tsutsui.shigeru@otsuka.jp | ✅ 下書き作成済み | CRM Action 234863（筒井様宛て、パターンVisited・医療） |
+| 14611 | Goshoku Vietnam | maiduytai@goshoku.co.jp | ✅ 下書き作成済み | CRM Action 234864（Mr. Mai宛て、パターンEN・食品） |
+| 14505 | TIROL CHOCO VIETNAM | t.suga@tirol-choco.com | ✅ 下書き作成済み | CRM Action 234865（菅様宛て、パターンVisited・食品） |
+| 14447 | Uchida Shoji Vietnam | m.kitahora@uchida-shoji.co.jp | ✅ 下書き作成済み | CRM Action 234866（北洞様宛て、パターンVisited・建設資材） |
+| 14361 | FAST RETAILING Vietnam | ayako.iyama@fastretailing.com | ✅ 下書き作成済み | CRM Action 234867（井山様宛て、パターンVisited・アパレル） |
 
 ### 未処理企業（次回継続）
 | 企業ID | 企業名 | 備考 |
