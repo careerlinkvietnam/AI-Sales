@@ -1188,6 +1188,7 @@ EOF
 | 15189 | OG Trading Vietnam | icchy@ogvnm.com | ✅ 下書き作成済み | CRM Action 234849（橋本様宛て、パターンB・化学） |
 | 15073 | UniCARE Atalian Vietnam | contact.vn@atalianworld.com | ✅ 下書き作成済み | CRM Action登録エラー（ご担当者様宛て、パターンFirst・初回） |
 | 15026 | HR Anabuki Vietnam | hirai@crie.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（平井様宛て、パターンVisited・訪問後定期連絡） |
+| 14971 | Boken Quality Evaluation | shinko@boken.or.jp | ✅ 下書き作成済み | CRM Action登録エラー（信耕様宛て、パターンC・契約済み） |
 
 ### 未処理企業（次回継続）
 | 企業ID | 企業名 | 備考 |
