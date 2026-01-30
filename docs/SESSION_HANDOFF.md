@@ -275,17 +275,18 @@ npx tsx scripts/search_sent_to.ts "to:@ドメイン"
 
 **スキップ通知スクリプト:**
 ```bash
-# 過去求人受領（スキップ後タグ更新必要）
-npx tsx scripts/notify_skip.ts <companyId> "<会社名>" "過去求人受領・3ヶ月以内に連絡済み" "<日付>" "<担当者名>" "<email>"
-npx tsx scripts/update_month_tag.ts <companyId>  # タグも更新する
+# 過去求人受領（Slack通知にタグ更新情報を含める）
+npx tsx scripts/notify_skip.ts <companyId> "<会社名>" "過去求人受領・3ヶ月以内に連絡済み" "<日付>" "<担当者名>" "<email>" "<旧月→新月>"
+npx tsx scripts/update_month_tag.ts <companyId>
 
 # 例
-npx tsx scripts/notify_skip.ts 17991 "Sankei Manufacturing Vietnam" "過去求人受領・3ヶ月以内に連絡済み" "2025/11/05" "窪田様" "n-kubota@ngo-sankei.co.jp"
+npx tsx scripts/notify_skip.ts 17991 "Sankei Manufacturing Vietnam" "過去求人受領・3ヶ月以内に連絡済み" "2025/11/05" "窪田様" "n-kubota@ngo-sankei.co.jp" "1月→4月"
 npx tsx scripts/update_month_tag.ts 17991
 ```
 
 **重要: スキップ時も必ずタグ更新すること**
 - スキップ理由に関わらず、処理したらタグを3ヶ月先に更新
+- **Slack通知には必ずタグ更新情報（旧月→新月）を含める**
 - これにより次回処理時に再度リストに表示されることを防ぐ
 
 #### ルール17: メール送信確認後の必須手順（順序厳守）
