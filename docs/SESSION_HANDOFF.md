@@ -50,9 +50,10 @@ AI-Sales/
 │   ├── get_company_detail.ts     # 企業詳細取得
 │   ├── get_company_history.ts    # 連絡履歴取得
 │   ├── create_draft.ts           # Gmail下書きテスト
-│   ├── create_draft_and_notify.ts # 下書き作成+Slack通知
+│   ├── create_draft_and_notify.ts # 下書き作成+Slack通知（ログ保存）
 │   ├── create_crm_action.ts      # CRMコールメモ登録
 │   ├── list_sent_emails.ts       # 送信済みメール一覧
+│   ├── list_slack_notifications.ts # Slack通知履歴確認
 │   └── notify_slack.ts           # Slack通知テスト
 ├── tests/             # 64 テストファイル
 ├── config/            # 設定JSON (experiments, ops_schedule等)

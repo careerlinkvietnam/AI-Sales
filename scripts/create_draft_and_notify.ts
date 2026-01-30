@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import { GmailClient } from '../src/connectors/gmail/GmailClient';
+import * as fs from 'fs';
+import * as path from 'path';
 
 interface ContactHistory {
   visit: string;      // 訪問履歴（例: "2025/12/4 Ms. Sato Mai（武井様と面談）" または "なし"）
@@ -133,6 +135,26 @@ async function createDraftAndNotify(info: DraftInfo) {
 
   if (response.ok) {
     console.log('✅ Slack notification sent');
+
+    // Save to log file
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      companyId: info.companyId,
+      companyName: info.companyName,
+      recipientEmail: info.recipientEmail,
+      recipientName: info.recipientName,
+      subject: info.subject,
+      crmUrl: info.crmUrl,
+      draftId: result.draftId,
+      hasPersonalEmail: info.hasPersonalEmail,
+      companySummary: info.companySummary,
+      actionSummary: info.actionSummary,
+      contactHistory: info.contactHistory
+    };
+
+    const logPath = path.join(__dirname, '..', 'data', 'slack_notifications.ndjson');
+    fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+    console.log('✅ Logged to', logPath);
   } else {
     console.log('❌ Slack notification failed:', response.status);
   }
