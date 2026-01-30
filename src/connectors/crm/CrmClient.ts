@@ -824,6 +824,131 @@ export class CrmClient {
   }
 
   /**
+   * Get company tags from HTML page
+   * Note: JSON API doesn't include tags, so we scrape from HTML
+   *
+   * @param companyId - Company ID
+   * @returns Array of tag strings
+   */
+  async getCompanyTags(companyId: string): Promise<string[]> {
+    await this.ensureAuthenticated();
+
+    const html = await this.requestHtml(`/companies/${companyId}`);
+    const tags: string[] = [];
+
+    // Tags are displayed in <span class="tagit-label"> elements
+    const tagPattern = /class="tagit-label">([^<]+)</g;
+    let match;
+    while ((match = tagPattern.exec(html)) !== null) {
+      const tag = match[1].trim();
+      if (tag && !tags.includes(tag)) {
+        tags.push(tag);
+      }
+    }
+
+    return tags;
+  }
+
+  /**
+   * Update company month tag (e.g., "南部・1月連絡" → "南部・4月連絡")
+   * Adds 3 months to the current month tag
+   *
+   * @param companyId - Company ID
+   * @returns Updated tag info or null if no month tag found
+   */
+  async updateMonthTag(
+    companyId: string
+  ): Promise<{ oldTag: string; newTag: string; allTags: string[] } | null> {
+    const currentTags = await this.getCompanyTags(companyId);
+
+    // Find month tag pattern: 南部・X月連絡, 北部・X月連絡, 中部・X月連絡
+    const monthTagPattern = /^(南部|北部|中部)・(\d{1,2})月連絡$/;
+    let oldTag: string | null = null;
+    let newTag: string | null = null;
+
+    for (const tag of currentTags) {
+      const match = tag.match(monthTagPattern);
+      if (match) {
+        const region = match[1];
+        const currentMonth = parseInt(match[2], 10);
+        const newMonth = ((currentMonth - 1 + 3) % 12) + 1; // Add 3 months
+        oldTag = tag;
+        newTag = `${region}・${newMonth}月連絡`;
+        break;
+      }
+    }
+
+    if (!oldTag || !newTag) {
+      return null;
+    }
+
+    // Replace old tag with new
+    const newTags = currentTags.map(t => (t === oldTag ? newTag! : t));
+    await this.updateCompanyTags(companyId, newTags);
+
+    return { oldTag, newTag, allTags: newTags };
+  }
+
+  /**
+   * Update company tags
+   *
+   * @param companyId - Company ID
+   * @param tags - Array of tag strings (replaces all existing tags)
+   * @returns Updated company info
+   */
+  async updateCompanyTags(
+    companyId: string,
+    tags: string[]
+  ): Promise<{ companyId: string; tags: string[] }> {
+    await this.ensureAuthenticated();
+
+    // Get CSRF token from edit page
+    const editPageHtml = await this.requestHtml(`/companies/${companyId}/edit`);
+    const csrfMatch = editPageHtml.match(/<input[^>]*name="authenticity_token"[^>]*value="([^"]+)"/);
+    if (!csrfMatch) {
+      throw new AuthError('CSRF token not found on edit page');
+    }
+    const csrfToken = csrfMatch[1];
+
+    // Build form data
+    const formData = new URLSearchParams();
+    formData.append('_method', 'patch');
+    formData.append('authenticity_token', csrfToken);
+    formData.append('company[vn_tag_list]', tags.join(','));
+
+    const url = `${this.baseUrl}/companies/${companyId}`;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    };
+
+    if (this.sessionCookies) {
+      headers['Cookie'] = this.sessionCookies;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData.toString(),
+      redirect: 'manual',
+    });
+
+    // Rails returns 302 redirect on successful update
+    if (response.status === 302 || response.status === 200) {
+      return {
+        companyId,
+        tags,
+      };
+    } else if (response.status === 422) {
+      const text = await response.text();
+      throw new NetworkError(`Failed to update tags: validation error - ${text.substring(0, 200)}`, 422);
+    } else {
+      throw new NetworkError(`Failed to update tags: HTTP ${response.status}`, response.status);
+    }
+  }
+
+  /**
    * Check if currently authenticated
    */
   isAuthenticated(): boolean {

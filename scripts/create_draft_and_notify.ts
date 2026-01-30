@@ -162,21 +162,21 @@ async function createDraftAndNotify(info: DraftInfo) {
   return result;
 }
 
-// Execute for Monorevo Vietnam
+// Execute for HARIMA FC (Japanese)
 const draftInfo: DraftInfo = {
-  companyId: '16836',
-  companyName: 'Monorevo Vietnam Co., LTD',
-  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/16836',
-  recipientEmail: 'y_hosoi@monorevo.jp',
-  recipientName: '細井様',
+  companyId: '17281',
+  companyName: 'HARIMA FC Co.,Ltd.',
+  crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/17281',
+  recipientEmail: 'naito.takeaki@nissin.vn',
+  recipientName: '内藤様',
   subject: 'ご挨拶【キャリアリンク佐藤】',
-  body: `Monorevo Vietnam Co., LTD
-細井様
+  body: `HARIMA FC Co.,Ltd.
+内藤様
 
 お世話になっております。
 キャリアリンクの佐藤でございます。
 
-弊社では日系企業様向けに、ITエンジニアやSE、プログラマー、
+弊社では日系企業様向けに、営業職や事務職、
 その他御社の業務内容に合った候補者のご紹介を数多く行っております。
 
 「こんな人材がいたら相談したい」
@@ -212,14 +212,15 @@ Tel: (024) 3519 0410
 ■タイ(Thai office)
 CareerLink Recruitment Thailand Co.,Ltd.
 Room 58S, 47 Sukhumvit 69 Rd., Phra Khanong Nuea, Watthana, Bangkok, Thailand`,
-  companySummary: `• 日系企業（IT・業務アプリケーション）`,
+  companySummary: `• 日系企業（家電・生活雑貨 / 医療・化粧品）
+• 日本人マネージャーあり`,
   actionSummary: `• 定期フォロー
-• テンプレート: パターンA（ITエンジニア・SE・プログラマー）`,
+• テンプレート: パターンB（営業/事務）`,
   contactHistory: {
     visit: 'なし',
-    phone: 'なし',
+    phone: '2023/09 日本人マネージャー外出中',
     email: 'なし',
-    lastContact: '不明'
+    lastContact: '2023/09（電話）'
   },
   hasPersonalEmail: true
 };

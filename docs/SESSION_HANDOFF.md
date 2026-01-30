@@ -1,6 +1,6 @@
 # AI-Sales セッション引き継ぎドキュメント
 
-最終更新: 2026-01-28
+最終更新: 2026-01-30
 
 ---
 
@@ -54,6 +54,10 @@ AI-Sales/
 │   ├── create_crm_action.ts      # CRMコールメモ登録
 │   ├── list_sent_emails.ts       # 送信済みメール一覧
 │   ├── list_slack_notifications.ts # Slack通知履歴確認
+│   ├── update_month_tag.ts       # 月タグ更新（+3ヶ月）
+│   ├── notify_skip.ts            # スキップ通知（テンプレート）
+│   ├── search_sent_to.ts         # Gmail送信履歴検索
+│   ├── list_drafts.ts            # Gmail下書き一覧
 │   └── notify_slack.ts           # Slack通知テスト
 ├── tests/             # 64 テストファイル
 ├── config/            # 設定JSON (experiments, ops_schedule等)
@@ -88,7 +92,8 @@ npx ts-node scripts/get_company_email.ts 18493              # Step2: メール�
 npx ts-node scripts/get_company_detail.ts 18493             # Step3: 企業詳細取得
 npx ts-node scripts/get_company_history.ts 18493            # Step4: 連絡履歴取得
 npx ts-node scripts/create_draft_and_notify.ts              # Step7-8: 下書き保存+Slack通知
-npx ts-node scripts/create_crm_action.ts 18493 "担当者名" "メモ" "オフィス"  # Step10: CRM登録
+npx ts-node scripts/create_crm_action.ts 18493 "担当者名" "メモ" "オフィス"  # Step10-A: CRM登録
+npx tsx scripts/update_month_tag.ts 18493                                    # Step10-C: タグ更新
 
 # 個別テスト
 npx ts-node scripts/create_draft.ts             # Gmail下書きテスト
@@ -209,6 +214,86 @@ npx ts-node scripts/list_sent_emails.ts         # 送信済みメール確認
 - メール送信確認やCRM Action更新時に必要
 - CRMから取得できない場合は「企業サイトから取得」と備考に記載
 
+#### ルール14: 連絡履歴から言語・担当者を確認
+メール作成前に、CRMの連絡履歴（コールメモ）を確認し、以下を把握する：
+
+1. **過去の連絡相手**
+   - 誰とやり取りしていたか（名前・メールアドレス）
+   - 直近の担当者を優先
+
+2. **使用言語**
+   - 過去のメモに「英語」「English」等の記載があれば英語で送信
+   - 「日本人不在」「英語話者」等の記載にも注意
+
+3. **連絡先の優先順位**
+   - 過去にやり取りした担当者のメール > CRM登録のメール > 代表メール
+
+**例（AVT INTERNATIONAL JSC）:**
+- 履歴: 「Tan Vanさんへ英語でメール送信」
+- 対応: hello@avt.com.vn ではなく tan.van@avt.com.vn に英語で送信
+
+#### ルール15: 求人受領中の企業はスキップ
+- 「求人受領中」タグがある企業は、月タグがあっても**メール作成不要**
+- すでにアクティブな取引があるため、定期フォローメールは不要
+- **対応:**
+  1. Gmail送信履歴で最終連絡日を確認
+  2. Slackにスキップ通知を送信（最終連絡情報を含む）
+  3. 月タグを3ヶ月先に更新（例: 1月→4月）
+
+**最終連絡日の確認方法:**
+```bash
+npx tsx scripts/search_sent_to.ts "to:@ドメイン"
+```
+
+**スキップ通知スクリプト:**
+```bash
+# 求人受領中（タグ更新あり）
+npx tsx scripts/notify_skip.ts <companyId> "<会社名>" "求人受領中のためメール不要" "<日付>" "<担当者名>" "<email>" "<旧月→新月>"
+
+# 例
+npx tsx scripts/notify_skip.ts 17529 "One Asia Lawyers Vietnam" "求人受領中のためメール不要" "2025/07/11" "山本様" "fubito.yamamoto@oneasia.legal" "1月→4月"
+```
+
+**Slack通知フォーマット:**
+```
+🔴 スキップ: [会社名] ([会社ID])
+理由: 求人受領中のためメール不要
+最終連絡: [日付] [担当者名] ([メールアドレス])
+タグ更新: 南部・X月連絡 → 南部・Y月連絡
+CRM: [URL]
+```
+
+#### ルール16: 過去求人受領企業の最終連絡日を確認
+- 「過去求人受領」タグがある企業は、最終連絡日を確認する
+- **3ヶ月以内に連絡済み → スキップ**
+- **3ヶ月以上経過 → メール送信対象**
+
+**確認方法:**
+```bash
+npx tsx scripts/search_sent_to.ts "to:@ドメイン"
+```
+
+**スキップ通知スクリプト:**
+```bash
+# 過去求人受領（タグ更新なし）
+npx tsx scripts/notify_skip.ts <companyId> "<会社名>" "過去求人受領・3ヶ月以内に連絡済み" "<日付>" "<担当者名>" "<email>"
+
+# 例
+npx tsx scripts/notify_skip.ts 17991 "Sankei Manufacturing Vietnam" "過去求人受領・3ヶ月以内に連絡済み" "2025/11/05" "窪田様" "n-kubota@ngo-sankei.co.jp"
+```
+
+#### ルール17: メール送信確認後の必須手順（順序厳守）
+メール送信を確認したら、以下を**この順番で**実行する：
+
+```
+□ 1. CRMコールメモを「メール送付済み」に更新
+   - 宛先、宛名、件名、送信日を記載
+□ 2. タグを3ヶ月先に更新
+□ 3. SESSION_HANDOFF.mdを更新
+```
+
+**※タグ更新の前に必ずCRMコールメモを更新すること**
+
 ### 企業処理の完全ワークフロー（2026-01-28確定）
 
 ```
@@ -300,6 +385,36 @@ await client.createTelAction(
 - 対応者名（メール送信先の担当者名）
 - メモ内容（何をしたか）
 - オフィス名（任意）
+
+**Step 10-C: タグ更新（メール送信確認後）**
+- メール送信確認後、月タグを3ヶ月先に変更する
+- 例: 「南部・1月連絡」 → 「南部・4月連絡」
+- 他のタグは変更しない（日系企業、IT・ゲーム等はそのまま）
+
+**スクリプトで実行:**
+```bash
+npx tsx scripts/update_month_tag.ts <companyId>
+```
+
+**プログラムから実行:**
+```typescript
+import { CrmClient } from './src/connectors/crm/CrmClient';
+
+const client = CrmClient.createFromEnv();
+const result = await client.updateMonthTag('16811');
+// result: { oldTag: '南部・1月連絡', newTag: '南部・4月連絡', allTags: [...] }
+```
+
+**月タグ変換ルール:**
+| 現在のタグ | 新しいタグ |
+|------------|------------|
+| 1月連絡 | 4月連絡 |
+| 2月連絡 | 5月連絡 |
+| 3月連絡 | 6月連絡 |
+| ... | ... |
+| 10月連絡 | 1月連絡 |
+| 11月連絡 | 2月連絡 |
+| 12月連絡 | 3月連絡 |
 
 **CRM上での確認:**
 - 会社ページのタイムラインに「コールメモ」として表示される
@@ -731,20 +846,20 @@ EOF
 | 17991 | Sankei Manufacturing Vietnam | n-kubota@ngo-sankei.co.jp | ✅ 下書き作成済み | CRM Action 234638（窪田様宛て） |
 | 17854 | Vietnam Shell Stone Co.,LTD | shellstonevietnam@gmail.com | ✅ メール送信済み | CRM Action 234639（貝原様宛て） |
 | 17758 | Unifast Co.,Ltd | usukura@unifast.co.jp | ✅ メール送信済み | CRM Action 234640（臼倉様宛て、米良引き継ぎ） |
-| 17681 | Daiichi Corporation Vietnam | w-murayama@daiichi-j.co.jp | ✅ メール送信済み | CRM Action 234641（Murayama様宛て） |
+| 17681 | Daiichi Corporation Vietnam | w-murayama@daiichi-j.co.jp | ✅ メール送信済み | CRM Action 234641（Murayama様宛て）、タグ4月に更新済み |
 | 17555 | Alpia Vietnam Co.,Ltd | satoshi-sato@jeicreate.net | ✅ メール送信済み | CRM Action 234642（企業サイトでメール発見） |
 | 17529 | One Asia Lawyers Vietnam | fubito.yamamoto@oneasia.legal | ✅ 下書き作成済み | CRM Action 234643（山本様宛て、求人受領中・パターンC） |
 | 17478 | Matsusaka EDP Center Infotech Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234644（柴原様宛て、パターンA） |
 | 17420 | Arent Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234645（後藤様宛て、パターンB） |
 | 17290 | Aria Vietnam Inc | 要確認 | ✅ 下書き作成済み | CRM Action 234646（別府様宛て、パターンA） |
-| 17281 | HARIMA FC | 要確認 | ✅ 下書き作成済み | CRM Action 234647（内藤様宛て、パターンB・営業/事務） |
-| 17264 | NK LINKS VIET NAM | sato@tosmac-vietnam.com | ✅ メール送信済み | CRM Action 234648（佐藤様宛て、パターンA・サービス） |
-| 17255 | AVT INTERNATIONAL JSC | hello@avt.com.vn | ✅ 下書き作成済み | CRM Action 234649（採用担当者様宛て、パターンB・建設） |
+| 17281 | HARIMA FC | naito.takeaki@nissin.vn | ✅ メール送信済み | CRM Action 234647（内藤様宛て）、タグ4月に更新済み |
+| 17264 | NK LINKS VIET NAM | sato@tosmac-vietnam.com | ✅ メール送信済み | CRM Action 234648（佐藤様宛て、パターンA・サービス）、タグ4月に更新済み |
+| 17255 | AVT INTERNATIONAL JSC | tan.van@avt.com.vn | ✅ メール送信済み | CRM Action 234649（Tan Van様宛て・英語）、タグ4月に更新済み |
 | 17158 | Capco Vietnam | imazu01@central-auto.co.jp | ✅ メール送信済み | CRM Action 234651（今津様宛て、パターンA・訪問済み） |
 | 17128 | TAKARA BELMONT COSMETICS | ui_akamine@takarabelmont.vn | ✅ メール送信済み | CRM Action 234652（赤嶺様宛て） |
-| 17029 | VINEPRO | info@vinect-production.com | ✅ メール送信済み | CRM Action 234653（採用担当者様宛て、パターンA・広告） |
+| 17029 | VINEPRO | info@vinect-production.com | ✅ メール送信済み | CRM Action 234653（採用担当者様宛て、パターンA・広告）、タグ4月に更新済み |
 | 16983 | Mercuria Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234654（百田様宛て、パターンB・コンサル） |
-| 16970 | TENNO ENGINEERING | 要確認 | ✅ 下書き作成済み | CRM Action 234655（採用担当者様宛て、パターンA・製造） |
+| 16970 | TENNO ENGINEERING | ngan.dang_kayla@ce.com.vn | ✅ 下書き作成済み | CRM Action 234655（Ngan Dang様宛て・英語） |
 | 16908 | Maruyama Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234656（熱田様宛て、パターンB・訪問済み） |
 | 16836 | Monorevo Vietnam | 要確認 | ✅ 下書き作成済み | CRM登録エラー（要手動登録）細井様宛て、パターンA・IT |
 
