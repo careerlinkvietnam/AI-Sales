@@ -203,6 +203,11 @@ npx ts-node scripts/list_sent_emails.ts         # 送信済みメール確認
   - 📞 連絡履歴（訪問、電話、メール、最終コンタクト）
   - 宛先、宛名、件名、CRMリンク
 
+#### ルール13: 処理済み企業にはメールアドレスを記載
+- **処理済み企業テーブルには必ずメールアドレスを記載する**
+- メール送信確認やCRM Action更新時に必要
+- CRMから取得できない場合は「企業サイトから取得」と備考に記載
+
 ### 企業処理の完全ワークフロー（2026-01-28確定）
 
 ```
@@ -699,33 +704,33 @@ EOF
 - **Slackチャンネル**: AI-Sales通知（Webhook設定済み）
 
 ### 処理済み企業（2026-01-28）
-| 企業ID | 企業名 | 状態 | 備考 |
-|--------|--------|------|------|
-| 18454 | アルプス システム インテグレーション株式会社 | ✅ 下書き作成済み | |
-| 18493 | Supremetech Co.,Ltd | ✅ メール送信済み | CRM Action 234597 |
-| 18484 | Access Professional Vietnam | ❌ 誤処理（3月タグ） | CRM Action 234601 要削除 |
-| 18265 | Vina Takeuchi Co.,LTD | ✅ 下書き作成済み | CRM Action 234633 |
-| 18072 | Vina Nide Co.,LTD | ✅ 下書き作成済み | CRM Action 234635 |
-| 18061 | LJTrading Co.,LTD | ✅ 下書き作成済み | CRM Action 234637（連絡先不明タグ→企業サイトでメール発見） |
-| 17991 | Sankei Manufacturing Vietnam | ✅ 下書き作成済み | CRM Action 234638（既存クライアント、窪田様宛て） |
-| 17854 | Vietnam Shell Stone Co.,LTD | ✅ 下書き作成済み | CRM Action 234639（貝原様宛て） |
-| 17758 | Unifast Co.,Ltd | ✅ 下書き作成済み | CRM Action 234640（臼倉様宛て、米良引き継ぎ） |
-| 17681 | Daiichi Corporation Vietnam | ✅ 下書き作成済み | CRM Action 234641（Murayama様宛て） |
-| 17555 | Alpia Vietnam Co.,Ltd | ✅ 下書き作成済み | CRM Action 234642（Satoshi Sato様宛て、企業サイトでメール発見） |
-| 17529 | One Asia Lawyers Vietnam | ✅ 下書き作成済み | CRM Action 234643（山本様宛て、求人受領中・パターンC使用） |
-| 17478 | Matsusaka EDP Center Infotech Vietnam | ✅ 下書き作成済み | CRM Action 234644（柴原様宛て、パターンA） |
-| 17420 | Arent Vietnam | ✅ 下書き作成済み | CRM Action 234645（後藤様宛て、パターンB） |
-| 17290 | Aria Vietnam Inc | ✅ 下書き作成済み | CRM Action 234646（別府様宛て、パターンA） |
-| 17281 | HARIMA FC | ✅ 下書き作成済み | CRM Action 234647（内藤様宛て、パターンB・営業/事務） |
-| 17264 | NK LINKS VIET NAM | ✅ 下書き作成済み | CRM Action 234648（佐藤様宛て、パターンA・サービス） |
-| 17255 | AVT INTERNATIONAL JSC | ✅ 下書き作成済み | CRM Action 234649（採用担当者様宛て、パターンB・建設） |
-| 17158 | Capco Vietnam | ✅ 下書き作成済み | CRM Action 234651（今津様宛て、パターンA・訪問済み） |
-| 17128 | TAKARA BELMONT COSMETICS | ✅ 下書き作成済み | CRM Action 234652（赤嶺様宛て、パターンB・製造） |
-| 17029 | VINEPRO | ✅ 下書き作成済み | CRM Action 234653（採用担当者様宛て、パターンA・広告） |
-| 16983 | Mercuria Vietnam | ✅ 下書き作成済み | CRM Action 234654（百田様宛て、パターンB・コンサル） |
-| 16970 | TENNO ENGINEERING | ✅ 下書き作成済み | CRM Action 234655（採用担当者様宛て、パターンA・製造） |
-| 16908 | Maruyama Vietnam | ✅ 下書き作成済み | CRM Action 234656（熱田様宛て、パターンB・訪問済み） |
-| 16836 | Monorevo Vietnam | ✅ 下書き作成済み | CRM登録エラー（要手動登録）細井様宛て、パターンA・IT |
+| 企業ID | 企業名 | メールアドレス | 状態 | 備考 |
+|--------|--------|----------------|------|------|
+| 18454 | アルプス システム インテグレーション株式会社 | junya.takei@alsi.co.jp | ✅ 下書き作成済み | |
+| 18493 | Supremetech Co.,Ltd | info@supremetech.vn | ✅ メール送信済み | CRM Action 234597 |
+| 18484 | Access Professional Vietnam | - | ❌ 誤処理（3月タグ） | CRM Action 234601 要削除 |
+| 18265 | Vina Takeuchi Co.,LTD | info@v-takeuchi.vn | ✅ 下書き作成済み | CRM Action 234633 |
+| 18072 | Vina Nide Co.,LTD | info@vinanide.com | ✅ 下書き作成済み | CRM Action 234635 |
+| 18061 | LJTrading Co.,LTD | info@lj-worldwide.com | ✅ 下書き作成済み | CRM Action 234637（企業サイトでメール発見） |
+| 17991 | Sankei Manufacturing Vietnam | n-kubota@ngo-sankei.co.jp | ✅ 下書き作成済み | CRM Action 234638（窪田様宛て） |
+| 17854 | Vietnam Shell Stone Co.,LTD | shellstonevietnam@gmail.com | ✅ 下書き作成済み | CRM Action 234639（貝原様宛て） |
+| 17758 | Unifast Co.,Ltd | usukura@unifast.co.jp | ✅ 下書き作成済み | CRM Action 234640（臼倉様宛て、米良引き継ぎ） |
+| 17681 | Daiichi Corporation Vietnam | w-murayama@daiichi-j.co.jp | ✅ 下書き作成済み | CRM Action 234641（Murayama様宛て） |
+| 17555 | Alpia Vietnam Co.,Ltd | satoshi-sato@jeicreate.net | ✅ 下書き作成済み | CRM Action 234642（企業サイトでメール発見） |
+| 17529 | One Asia Lawyers Vietnam | fubito.yamamoto@oneasia.legal | ✅ 下書き作成済み | CRM Action 234643（山本様宛て、求人受領中・パターンC） |
+| 17478 | Matsusaka EDP Center Infotech Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234644（柴原様宛て、パターンA） |
+| 17420 | Arent Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234645（後藤様宛て、パターンB） |
+| 17290 | Aria Vietnam Inc | 要確認 | ✅ 下書き作成済み | CRM Action 234646（別府様宛て、パターンA） |
+| 17281 | HARIMA FC | 要確認 | ✅ 下書き作成済み | CRM Action 234647（内藤様宛て、パターンB・営業/事務） |
+| 17264 | NK LINKS VIET NAM | sato@tosmac-vietnam.com | ✅ 下書き作成済み | CRM Action 234648（佐藤様宛て、パターンA・サービス） |
+| 17255 | AVT INTERNATIONAL JSC | hello@avt.com.vn | ✅ 下書き作成済み | CRM Action 234649（採用担当者様宛て、パターンB・建設） |
+| 17158 | Capco Vietnam | imazu01@central-auto.co.jp | ✅ 下書き作成済み | CRM Action 234651（今津様宛て、パターンA・訪問済み） |
+| 17128 | TAKARA BELMONT COSMETICS | ui_akamine@takarabelmont.vn | ✅ 下書き作成済み | CRM Action 234652（赤嶺様宛て、パターンB・製造） |
+| 17029 | VINEPRO | info@vinect-production.com | ✅ 下書き作成済み | CRM Action 234653（採用担当者様宛て、パターンA・広告） |
+| 16983 | Mercuria Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234654（百田様宛て、パターンB・コンサル） |
+| 16970 | TENNO ENGINEERING | 要確認 | ✅ 下書き作成済み | CRM Action 234655（採用担当者様宛て、パターンA・製造） |
+| 16908 | Maruyama Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234656（熱田様宛て、パターンB・訪問済み） |
+| 16836 | Monorevo Vietnam | 要確認 | ✅ 下書き作成済み | CRM登録エラー（要手動登録）細井様宛て、パターンA・IT |
 
 ### 未処理企業（次回継続）
 | 企業ID | 企業名 | 備考 |
