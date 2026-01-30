@@ -1,0 +1,17 @@
+{
+  "companyId": "15353",
+  "companyName": "SHOCHIKU CO., LTD.",
+  "recipientEmail": "satoru_kamiyama@shochiku.co.jp",
+  "recipientName": "上山様",
+  "template": "pattern_first",
+  "subject": "ご挨拶【キャリアリンク佐藤】",
+  "companySummary": "• SHOCHIKU / 松竹ホーチミン駐在事務所\n• エンターテインメント\n• HCMC Saigon Tower (District 1)",
+  "actionSummary": "• 初回コンタクト（上山様宛て）\n• 送信履歴なし\n• パターンFirst（ファーストコンタクト）",
+  "contactHistory": {
+    "visit": "坂田訪問済",
+    "phone": "不明",
+    "email": "送信履歴なし",
+    "lastContact": "なし（初回）"
+  },
+  "hasPersonalEmail": true
+}

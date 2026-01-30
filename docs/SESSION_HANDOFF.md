@@ -1175,6 +1175,12 @@ EOF
 | 16564 | Scroll Vietnam | atsushi-izumi@scroll.vn | ✅ 下書き作成済み | CRM Action 234839（泉様宛て、パターンC・契約済み） |
 | 16353 | Zuno Vietnam | komatsu@zuno.tv | ⏭️ スキップ | 2025/11/11連絡済み（3ヶ月以内）、タグ4月に更新済み |
 | 16181 | KIREI NETWORK | y.hanaoka@kirei-network.com | ✅ 下書き作成済み | CRM登録エラー（要手動登録）花岡様宛て、パターンB・サービス |
+| 16034 | TAGGER | miyamoto@tagger-vn.com | ✅ 下書き作成済み | CRM Action 234844（宮本様宛て、パターンB・広告） |
+| 15366 | AMETHYST MEDICAL VIETNAM | ysugioka@amethyst.co.jp | ⏭️ スキップ | 求人受領中（2026/01/30連絡中）、タグ4月に更新済み |
+| 15353 | SHOCHIKU | satoru_kamiyama@shochiku.co.jp | ✅ 下書き作成済み | CRM Action 234845（上山様宛て、パターンFirst・初回） |
+| 15348 | TOTAI | yuki_to@totai.com | ⏭️ スキップ | 2025/12/12連絡済み（3ヶ月以内）、タグ4月に更新済み |
+| 15335 | IBUKI INVESTMENT | info@ibuki.vn | ⏭️ スキップ | 2026/01/08連絡済み（3ヶ月以内）、タグ4月に更新済み |
+| 15333 | CANVAS.ASIA | s.katayama@canvas-works.asia | ✅ 下書き作成済み | CRM Action 234846（片山様宛て、パターンVisited・訪問後定期連絡） |
 
 ### 未処理企業（次回継続）
 | 企業ID | 企業名 | 備考 |

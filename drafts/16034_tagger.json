@@ -1,0 +1,20 @@
+{
+  "companyId": "16034",
+  "companyName": "TAGGER CO., LTD.",
+  "recipientEmail": "miyamoto@tagger-vn.com",
+  "recipientName": "宮本様",
+  "template": "pattern_b",
+  "greeting": "visited_3to6months",
+  "industry": "サービス",
+  "customParagraph": "その後、採用活動のご状況はいかがでしょうか。",
+  "subject": "採用活動のご状況について【キャリアリンク佐藤】",
+  "companySummary": "• TAGGER / タガー\n• 広告・ビジネスコンテンツ\n• HCMC District 1 / Da Nang",
+  "actionSummary": "• 定期フォロー（宮本様宛て）\n• 前回: 2025/09/23 contact@宛て\n• パターンB（シンプル）",
+  "contactHistory": {
+    "visit": "不明",
+    "phone": "2022/06/02 電話対応あり",
+    "email": "2025/09/23 contact@宛て採用状況確認",
+    "lastContact": "2025/09/23（メール）"
+  },
+  "hasPersonalEmail": true
+}

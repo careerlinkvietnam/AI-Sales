@@ -1,0 +1,17 @@
+{
+  "companyId": "15333",
+  "companyName": "CANVAS.ASIA CO., LTD",
+  "recipientEmail": "s.katayama@canvas-works.asia",
+  "recipientName": "片山様",
+  "template": "pattern_visited",
+  "subject": "採用活動のご状況について【キャリアリンク佐藤】",
+  "companySummary": "• CANVAS.ASIA / キャンバスドットアジア\n• IT・ソフトウェア・広告\n• HCMC Dreamplex Building (District 1)",
+  "actionSummary": "• 定期フォロー（片山様宛て）\n• 前回: 2024/01/23\n• パターンVisited（訪問後定期連絡）",
+  "contactHistory": {
+    "visit": "佐藤訪問済（2022/07）",
+    "phone": "2022/07/06 電話対応あり",
+    "email": "2024/01/23 片山様宛て採用状況確認",
+    "lastContact": "2024/01/23（メール）"
+  },
+  "hasPersonalEmail": true
+}
