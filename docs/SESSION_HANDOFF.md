@@ -157,6 +157,12 @@ npx ts-node scripts/list_sent_emails.ts         # 送信済みメール確認
 - ✅ **Gmailで送信履歴を自動確認する**
 - ✅ pre_check.tsが自動でGmail送信確認を行う
 
+**間違い7: 古いメールを今回送信したメールと混同する**
+- ❌ Gmailで見つかったメール = 今回の下書きが送信された
+- ✅ **送信日時を確認し、下書き作成日より後かどうか確認**
+- ✅ 2025年11月のメールは、2026年1月に作成した下書きの送信ではない
+- ✅ 下書き作成日時とGmailの送信日時を比較する
+
 #### ルール1: 1社ずつ処理（ユーザーが止めるまで継続）
 - **バッチ処理禁止**。必ず1社ずつ確認し、次へ進む
 - 全ページ一括取得は不要。1社ずつ確認する
@@ -1059,7 +1065,7 @@ EOF
 | 17681 | Daiichi Corporation Vietnam | w-murayama@daiichi-j.co.jp | ✅ メール送信済み | CRM Action 234641（Murayama様宛て）、タグ4月に更新済み |
 | 17555 | Alpia Vietnam Co.,Ltd | satoshi-sato@jeicreate.net | ✅ メール送信済み | CRM Action 234642（企業サイトでメール発見） |
 | 17529 | One Asia Lawyers Vietnam | fubito.yamamoto@oneasia.legal | ✅ メール送信済み | CRM Action 234643（山本様宛て、求人受領中・パターンC）、タグ4月に更新済み |
-| 17478 | Matsusaka EDP Center Infotech Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234644（柴原様宛て、パターンA） |
+| 17478 | Matsusaka EDP Center Infotech Vietnam | recruit.vn@mec-infotech.com | ✅ メール送信済み | CRM Action 234644（柴原様宛て）、タグ6月に更新済み |
 | 17420 | Arent Vietnam | 要確認 | ✅ 下書き作成済み | CRM Action 234645（後藤様宛て、パターンB） |
 | 17290 | Aria Vietnam Inc | 要確認 | ✅ 下書き作成済み | CRM Action 234646（別府様宛て、パターンA） |
 | 17281 | HARIMA FC | naito.takeaki@nissin.vn | ✅ メール送信済み | CRM Action 234647（内藤様宛て）、タグ4月に更新済み |
