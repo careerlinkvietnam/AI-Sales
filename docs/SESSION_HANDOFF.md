@@ -1192,6 +1192,7 @@ EOF
 | 14949 | Anabuki Kosan HCMC | k-kurahashi@anabuki-kosan.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（倉橋様宛て、パターンVisited・訪問後定期連絡） |
 | 14913 | Seiwa Kaiun | nrtk-inazawa@seiwa-kaiun.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（稲澤様宛て、パターンVisited・物流） |
 | 14845 | Showa Vietnam | showa.vn@shou-wa.com | ✅ 下書き作成済み | CRM Action登録エラー（Nishizawa様宛て、パターンB・縫製） |
+| 14721 | Environment Space Engineering | t-fujii@kankyo-set.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（藤井様宛て、パターンVisited・設計） |
 
 ### 未処理企業（次回継続）
 | 企業ID | 企業名 | 備考 |
