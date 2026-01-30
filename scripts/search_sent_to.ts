@@ -65,5 +65,13 @@ async function searchSentEmails(searchQuery: string) {
   }
 }
 
-const query = process.argv[2] || 'oneasia.legal';
+const query = process.argv[2];
+
+if (!query) {
+  console.log('Usage: npx tsx scripts/search_sent_to.ts <searchQuery>');
+  console.log('Example: npx tsx scripts/search_sent_to.ts "example@company.com"');
+  console.log('Example: npx tsx scripts/search_sent_to.ts "company.com"');
+  process.exit(1);
+}
+
 searchSentEmails(query).catch(console.error);

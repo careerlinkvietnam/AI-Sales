@@ -40,7 +40,13 @@ async function fetchWithCookies(url: string, options: {
 }
 
 async function main() {
-  const companyId = process.argv[2] || '18454';
+  const companyId = process.argv[2];
+
+  if (!companyId) {
+    console.log('Usage: npx tsx scripts/get_company_email.ts <companyId>');
+    console.log('Example: npx tsx scripts/get_company_email.ts 16065');
+    process.exit(1);
+  }
 
   console.log('Step 1: Getting CSRF token...');
   const loginPage = await fetchWithCookies('https://www.careerlink.vn:1443/siankaan0421/login');

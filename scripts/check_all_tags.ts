@@ -67,7 +67,13 @@ async function main() {
     : '';
   const sessionCookie = newCookies || cookies1;
 
-  const companyIds = ['18494', '18493', '18492', '18491', '18486', '18485', '18484', '18483', '18482', '18481'];
+  const companyIds = process.argv.slice(2);
+
+  if (companyIds.length === 0) {
+    console.log('Usage: npx tsx scripts/check_all_tags.ts <companyId1> <companyId2> ...');
+    console.log('Example: npx tsx scripts/check_all_tags.ts 16065 16970 17281');
+    process.exit(1);
+  }
 
   console.log('=== CRM タグ確認結果 ===\n');
 
