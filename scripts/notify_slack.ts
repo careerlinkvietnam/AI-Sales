@@ -95,18 +95,81 @@ export async function notifyDraftCreated(info: DraftNotification): Promise<boole
   }
 }
 
-// CLI test
+// CLI usage: npx tsx scripts/notify_slack.ts <companyId> <companyName> <email> <recipientName> <subject> <details>
 if (require.main === module) {
-  const testInfo: DraftNotification = {
-    companyName: 'アルプス システム インテグレーション株式会社',
-    companyId: '18454',
-    crmUrl: 'https://www.careerlink.vn:1443/executive-search/vn/companies/18454',
-    recipientEmail: 'junya.takei@alsi.co.jp',
-    subject: '先日のご面談のお礼とご状況確認',
-    draftId: 'r-7641259842320052611'
+  const args = process.argv.slice(2);
+
+  if (args.length < 5) {
+    console.log(`Usage: npx tsx scripts/notify_slack.ts <companyId> <companyName> <email> <recipientName> <subject> [details]
+
+Example:
+  npx tsx scripts/notify_slack.ts 16065 "Tombow Manufacturing" "onoderas@tombow-tma.com.vn" "小野寺様" "金型エンジニアご提案後のフォロー【キャリアリンク佐藤】" "詳細情報"
+`);
+    process.exit(1);
+  }
+
+  const [companyId, companyName, recipientEmail, recipientName, subject, details] = args;
+
+  const info: DraftNotification = {
+    companyName: companyName,
+    companyId: companyId,
+    crmUrl: `https://www.careerlink.vn:1443/executive-search/vn/companies/${companyId}`,
+    recipientEmail: recipientEmail,
+    subject: subject,
+    draftId: 'N/A'
   };
 
-  notifyDraftCreated(testInfo).then(success => {
-    console.log('Test result:', success ? 'Success' : 'Failed');
-  });
+  // Send detailed notification with custom message
+  const webhookUrl = process.env.SLACK_WEBHOOK_URL;
+  if (webhookUrl && details) {
+    const message = {
+      blocks: [
+        {
+          type: 'header',
+          text: { type: 'plain_text', text: '📧 下書き作成完了', emoji: true }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*企業:* ${companyName}\n*企業ID:* ${companyId}`
+          }
+        },
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: details }
+        },
+        { type: 'divider' },
+        {
+          type: 'section',
+          fields: [
+            { type: 'mrkdwn', text: `*宛先:*\n${recipientEmail}` },
+            { type: 'mrkdwn', text: `*宛名:*\n${recipientName}` }
+          ]
+        },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*件名:*\n${subject}` }
+        },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*CRM:* <${info.crmUrl}|企業ページを開く>` }
+        }
+      ]
+    };
+
+    fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(message)
+    }).then(res => {
+      console.log(res.ok ? '[Slack] Notification sent successfully' : '[Slack] Failed');
+      console.log('Test result:', res.ok ? 'Success' : 'Failed');
+    }).catch(console.error);
+  } else {
+    notifyDraftCreated(info).then(success => {
+      console.log('Test result:', success ? 'Success' : 'Failed');
+    });
+  }
 }
