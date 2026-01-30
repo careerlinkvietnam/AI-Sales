@@ -69,23 +69,39 @@ async function main() {
     : '';
   const sessionCookie = newCookies || cookies1;
 
-  // Search companies by tag
+  // Search companies by tag (with pagination)
   console.log(`タグ "${tag}" で検索中...\n`);
   const encodedTag = encodeURIComponent(tag);
-  const searchRes = await fetchWithCookies(
-    `https://www.careerlink.vn:1443/executive-search/vn/companies/tags?tags=${encodedTag}`,
-    { headers: { 'Cookie': sessionCookie } }
-  );
-
-  // Parse HTML - look for company links
-  const companyPattern = /<a[^>]*href="\/executive-search\/vn\/companies\/(\d+)"[^>]*>([^<]*)<\/a>/g;
   const companies: { id: string; name: string }[] = [];
-  let match;
-  while ((match = companyPattern.exec(searchRes.body)) !== null) {
-    const id = match[1];
-    const name = match[2].trim();
-    if (name && !companies.find(c => c.id === id)) {
-      companies.push({ id, name });
+  let page = 1;
+  let hasMore = true;
+
+  while (hasMore) {
+    const searchRes = await fetchWithCookies(
+      `https://www.careerlink.vn:1443/executive-search/vn/companies/tags?tags=${encodedTag}&page=${page}`,
+      { headers: { 'Cookie': sessionCookie } }
+    );
+
+    // Parse HTML - look for company links
+    const companyPattern = /<a[^>]*href="\/executive-search\/vn\/companies\/(\d+)"[^>]*>([^<]*)<\/a>/g;
+    let match;
+    let foundOnPage = 0;
+    while ((match = companyPattern.exec(searchRes.body)) !== null) {
+      const id = match[1];
+      const name = match[2].trim();
+      if (name && !companies.find(c => c.id === id)) {
+        companies.push({ id, name });
+        foundOnPage++;
+      }
+    }
+
+    console.log(`  ページ ${page}: ${foundOnPage}社`);
+
+    // Check for next page link
+    if (searchRes.body.includes(`page=${page + 1}`) && foundOnPage > 0) {
+      page++;
+    } else {
+      hasMore = false;
     }
   }
 

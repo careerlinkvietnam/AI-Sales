@@ -1,18 +1,16 @@
 {
   "companyId": "16065",
   "companyName": "Tombow Manufacturing Asia Co., Ltd.",
-  "recipientEmail": "onoderas@tombow-tma.com.vn",
-  "recipientName": "小野寺様",
-  "template": "pattern_a",
-  "industry": "金型",
-  "customParagraph": "前回10月に金型エンジニア（日本語話者）をご提案させていただきましたが、その後いかがでしょうか。",
-  "greeting": "standard",
+  "recipientEmail": "tanakaj@star.tombow.co.jp",
+  "recipientName": "田中様",
+  "subject": "採用活動のご状況確認【キャリアリンク佐藤】",
+  "body": "Tombow Manufacturing Asia Co., Ltd.\n田中様\n\nお世話になっております。\nキャリアリンクの佐藤でございます。\n\nその後、採用活動のご状況はいかがでしょうか。\n\n御社では金型や組み立てなど製造関連の人材ニーズがおありかと思いますが、\nもし現在お探しのポジションがございましたら、ぜひお声がけください。\n\nベトナムの人材市場についての情報提供なども可能ですので、\nお気軽にご連絡いただければ幸いです。\n\n引き続きどうぞよろしくお願いいたします。\n\n--\n『人をつなぎ、キャリアを創る』\nキャリアリンク (CareerLink Co., Ltd.)\n佐藤　舞 (Ms. Mai Sato)\nMobile : (+84)091-140-1961\nTel(日本人直通) : 028-3812-7983\nHR-Website : https://www.CareerLink.vn\nLicense : 31116/SLDTBXH-GPGH\n-----------------------------------\nホーチミンヘッドオフィス(HCMC Head Office) :\nRoom 302, 270–272 Cong Hoa Street, Tan Binh Ward, Ho Chi Minh City\n------------------------------------\nハノイオフィス(HN Office) :\nRoom 307, DMC Tower, 535 Kim Ma St, Giang Vo Ward, Ha Noi City\nTel: (024) 3519 0410\nダナンオフィス(DN Office)：\n8th Floor, ACB Da Nang Tower, 218 Bach Dang St, Hai Chau Ward, Da Nang City\n■日本(Japan Office)\nキャリアリンクアジア株式会社\n千葉県千葉市中央区栄町36－10　甲南アセット千葉中央ビル5F-D\n厚生労働大臣許可番号：12-ユ-300460\n登録支援許可番号：20登-003823\n■タイ(Thai office)\nCareerLink Recruitment Thailand Co.,Ltd.\nRoom 58S, 47 Sukhumvit 69 Rd., Phra Khanong Nuea, Watthana, Bangkok, Thailand",
   "companySummary": "• トンボ鉛筆グループ製造会社\n• 金型・組み立て\n• Dong Nai・Amata IP",
-  "actionSummary": "• 過去求人フォロー\n• 前回: 2025/10/08 金型エンジニア提案\n• テンプレート: パターンA",
+  "actionSummary": "• 定期フォロー（田中様宛て）\n• 前回: 小野寺様に金型エンジニア提案（返信なし）→ 田中様に状況確認\n• テンプレート: パターンA（製造）をカスタマイズ",
   "contactHistory": {
     "visit": "佐藤訪問済",
     "phone": "不明",
-    "email": "2025/10/08 金型エンジニア提案",
+    "email": "2025/10/08 小野寺様宛て金型エンジニア提案",
     "lastContact": "2025/10/08（メール）"
   },
   "hasPersonalEmail": true

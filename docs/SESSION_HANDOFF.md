@@ -471,6 +471,30 @@ npx tsx scripts/update_month_tag.ts 17991
 
 **※タグ更新の前に必ずCRMコールメモを更新すること**
 
+### 新しい月タグの処理開始手順
+
+**新しい月（例: 南部・1月連絡）を処理開始する際は、以下の手順で全企業をリスト化してから1件ずつ処理する:**
+
+```bash
+# Step 1: 全企業IDをファイルに出力
+npx tsx scripts/list_all_companies.ts "南部・1月連絡" 2>&1 | grep "^\[" | sed 's/\[//' | sed 's/\].*//' > /tmp/january_companies.txt
+
+# Step 2: 件数確認
+wc -l /tmp/january_companies.txt
+
+# Step 3: 先頭から1件ずつpre_check.tsで確認して処理
+head -1 /tmp/january_companies.txt  # 最初の企業ID取得
+npx tsx scripts/pre_check.ts <企業ID> 1
+```
+
+**処理ルール:**
+- 全件をリスト化してから、上から順番に処理
+- 1件処理したら次へ進む（飛ばさない）
+- 処理済み・スキップ済みも含めて全件確認する
+- SESSION_HANDOFF.mdに処理状況を記録
+
+---
+
 ### 企業処理の完全ワークフロー（2026-01-30更新）
 
 **★最重要★ 処理開始前に必ずpre_check.tsを実行**
