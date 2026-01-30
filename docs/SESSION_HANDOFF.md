@@ -44,6 +44,7 @@ AI-Sales/
 │   ├── data/          # NDJSON永続化層
 │   └── notifications/ # Webhook通知
 ├── scripts/           # ユーティリティスクリプト
+│   ├── pre_check.ts              # ★処理前必須チェック（必ず最初に実行）
 │   ├── list_companies.ts         # タグで企業一覧取得（次の1社を表示）
 │   ├── list_all_companies.ts     # タグで企業一覧取得（全社+タグ確認）
 │   ├── get_company_email.ts      # 企業メール取得
@@ -459,11 +460,25 @@ npx tsx scripts/update_month_tag.ts 17991
 
 **※タグ更新の前に必ずCRMコールメモを更新すること**
 
-### 企業処理の完全ワークフロー（2026-01-28確定）
+### 企業処理の完全ワークフロー（2026-01-30更新）
+
+**★最重要★ 処理開始前に必ずpre_check.tsを実行**
+
+```bash
+npx tsx scripts/pre_check.ts <companyId> <targetMonth>
+# 例: npx tsx scripts/pre_check.ts 16970 1
+```
+
+このスクリプトがチェックする項目:
+1. CRMタグが対象月と一致するか
+2. SESSION_HANDOFF.mdに処理済み記載があるか
+3. 下書き作成済みで未送信ではないか
+
+**チェックに通らない場合は処理を開始してはいけない**
 
 ```
-Step 0: CRMでタグ確認 ★必須★
-    ↓ 必ずCRM画面で企業のタグを目視確認
+Step 0: pre_check.ts実行 ★必須★
+    ↓ チェックに通らなければ処理しない
 Step 1: 企業選定（現在月タグの企業のみ）
     ↓
 Step 2: 連絡先確認（メールあり？）
@@ -489,8 +504,8 @@ Step 10: CRM sales_action登録（コールメモ）★許可必要
 
 | Step | 内容 | 実行方法 |
 |------|------|----------|
-| 0 | CRMでタグ確認 | CRM画面で企業ページを開きタグを目視確認（必須） |
-| 1 | 企業選定 | 現在月のタグがある企業のみ処理対象 |
+| 0 | 処理前チェック | `npx tsx scripts/pre_check.ts {企業ID} {対象月}` ★必須★ |
+| 1 | 企業選定 | チェックに通った企業のみ処理対象 |
 | 2 | 連絡先確認 | `npx ts-node scripts/get_company_email.ts {企業ID}` |
 | 3 | 会社情報確認 | `npx ts-node scripts/get_company_detail.ts {企業ID}` |
 | 4 | 連絡履歴確認 | `npx ts-node scripts/get_company_history.ts {企業ID}` |
