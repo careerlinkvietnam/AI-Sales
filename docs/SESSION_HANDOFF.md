@@ -1187,6 +1187,7 @@ EOF
 | 15231 | Hokuetsu Corporation | yoshiharu.arai@hokuetsucorp.com.vn | ✅ 下書き作成済み | CRM Action 234848（荒井様宛て、パターンFirst・初回） |
 | 15189 | OG Trading Vietnam | icchy@ogvnm.com | ✅ 下書き作成済み | CRM Action 234849（橋本様宛て、パターンB・化学） |
 | 15073 | UniCARE Atalian Vietnam | contact.vn@atalianworld.com | ✅ 下書き作成済み | CRM Action登録エラー（ご担当者様宛て、パターンFirst・初回） |
+| 15026 | HR Anabuki Vietnam | hirai@crie.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（平井様宛て、パターンVisited・訪問後定期連絡） |
 
 ### 未処理企業（次回継続）
 | 企業ID | 企業名 | 備考 |

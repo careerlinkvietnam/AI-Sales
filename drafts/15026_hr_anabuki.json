@@ -1,0 +1,17 @@
+{
+  "companyId": "15026",
+  "companyName": "HR Anabuki Vietnam Co., LTD",
+  "recipientEmail": "hirai@crie.co.jp",
+  "recipientName": "平井様",
+  "template": "pattern_visited",
+  "subject": "採用活動のご状況について【キャリアリンク佐藤】",
+  "companySummary": "• HR Anabuki Vietnam\n• 人材サービス・BPO\n• Da Nang (本社), HCMC, Hanoi",
+  "actionSummary": "• 定期フォロー（平井様宛て）\n• 前回: 米良訪問済\n• パターンVisited（訪問後定期連絡）",
+  "contactHistory": {
+    "visit": "米良訪問済",
+    "phone": "不明",
+    "email": "送信履歴なし",
+    "lastContact": "訪問済（日付不明）"
+  },
+  "hasPersonalEmail": true
+}
