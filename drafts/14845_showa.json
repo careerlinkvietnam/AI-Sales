@@ -1,0 +1,19 @@
+{
+  "companyId": "14845",
+  "companyName": "Showa (Vietnam) Co., LTD",
+  "recipientEmail": "showa.vn@shou-wa.com",
+  "recipientName": "Nishizawa様",
+  "template": "pattern_b",
+  "greeting": "standard",
+  "customParagraph": "その後、採用活動のご状況はいかがでしょうか。",
+  "subject": "採用活動のご状況について【キャリアリンク佐藤】",
+  "companySummary": "• 昭和ベトナム\n• 製造・縫製\n• HCMC Tan Thuan EPZ (District 7)",
+  "actionSummary": "• 定期フォロー（Nishizawa様宛て）\n• 前回: 坂田メール送信済\n• パターンB（シンプル）",
+  "contactHistory": {
+    "visit": "不明",
+    "phone": "不明",
+    "email": "坂田メール送信済（日付不明）",
+    "lastContact": "不明"
+  },
+  "hasPersonalEmail": false
+}
