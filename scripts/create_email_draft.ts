@@ -11,18 +11,24 @@ import * as path from 'path';
  *
  * Example:
  *   npx tsx scripts/create_email_draft.ts ./drafts/16065_tombow.json
+ *
+ * テンプレート:
+ *   - pattern_a: パターンA - 具体的な価値を伝える
+ *   - pattern_b: パターンB - シンプルに親しみやすく
+ *   - pattern_c: パターンC - 求人受領中クライアント向け
+ *   - pattern_en: 英語版
  */
 
 // ========================================
-// テンプレート定義
+// テンプレート定義（SESSION_HANDOFF.mdと統一）
 // ========================================
 
 const TEMPLATES = {
-  // パターンA: 製造業向け（日本語）
-  manufacturing_ja: {
-    name: '製造業向け（日本語）',
-    body: `弊社では日系企業様向けに、製造管理や技術職、
-品質管理など御社の業務内容に合った候補者のご紹介を数多く行っております。
+  // パターンA: 具体的な価値を伝える
+  pattern_a: {
+    name: 'パターンA: 具体的な価値を伝える',
+    body: `弊社では日系企業様向けに、{職種}、その他御社の業務内容に
+合った候補者のご紹介を数多く行っております。
 
 「こんな人材がいたら相談したい」
 「まずは市場の状況だけ知りたい」
@@ -33,27 +39,38 @@ const TEMPLATES = {
 引き続きよろしくお願いいたします。`
   },
 
-  // パターンB: 営業・事務向け（日本語）
-  sales_admin_ja: {
-    name: '営業・事務向け（日本語）',
-    body: `弊社では日系企業様向けに、営業職や事務職、
-その他御社の業務内容に合った候補者のご紹介を数多く行っております。
+  // パターンB: シンプルに親しみやすく
+  pattern_b: {
+    name: 'パターンB: シンプルに親しみやすく',
+    body: `弊社では{職種}、その他御社の業務内容に合った
+候補者のご紹介が可能です。
 
-「こんな人材がいたら相談したい」
-「まずは市場の状況だけ知りたい」
+もし採用についてお困りのことがあれば、
+お気軽にご相談ください。
 
-といったご相談も歓迎しております。
-お気軽にご連絡いただければ幸いです。
+「まだ具体的ではないけど、ちょっと話を聞きたい」
+というご連絡も大歓迎です。
 
 引き続きよろしくお願いいたします。`
   },
 
-  // パターンC: 英語
-  general_en: {
-    name: 'General (English)',
+  // パターンC: 求人受領中クライアント向け
+  pattern_c: {
+    name: 'パターンC: 求人受領中クライアント向け',
+    body: `現在いただいている求人状況について、
+変更などはございませんでしょうか？
+
+追加のご要望などございましたら、
+お気軽にお申し付けください。
+
+引き続きよろしくお願いいたします。`
+  },
+
+  // 英語版
+  pattern_en: {
+    name: 'Pattern (English)',
     body: `We specialize in recruiting for Japanese companies in Vietnam,
-providing candidates for various positions including sales, administration,
-engineering, and management roles.
+providing candidates for various positions including {jobTypes}.
 
 We would be happy to discuss your hiring needs,
 whether you have immediate requirements or are just exploring the market.
@@ -61,18 +78,38 @@ whether you have immediate requirements or are just exploring the market.
 Please feel free to reach out at your convenience.
 
 Best regards,`
-  },
-
-  // パターンD: 過去求人フォロー（日本語）
-  past_job_followup_ja: {
-    name: '過去求人フォロー（日本語）',
-    body: `その後、採用活動のご状況はいかがでしょうか。
-
-弊社では引き続き、御社のご要望に合った候補者のご紹介が可能でございます。
-もし現在採用をご検討中でしたら、ぜひお気軽にご相談ください。
-
-どうぞよろしくお願いいたします。`
   }
+};
+
+// 職種カスタマイズルール
+const JOB_TYPES_BY_INDUSTRY: Record<string, string> = {
+  'IT': 'ITエンジニア、SE、プログラマー',
+  'オフショア': 'ITエンジニア、SE、プログラマー',
+  '製造': '生産管理、品質管理、技術者',
+  '工場': '生産管理、品質管理、技術者',
+  'メーカー': '営業、営業事務、貿易事務',
+  '商社': '営業、営業事務、貿易事務',
+  '建設': '施工管理、現場監督、CADオペレーター',
+  '物流': '物流管理、倉庫管理、通関士',
+  '倉庫': '物流管理、倉庫管理、通関士',
+  'コンサル': 'コンサルタント、アシスタント',
+  'サービス': 'コンサルタント、アシスタント',
+  '法務': '法務担当、経理、会計スタッフ',
+  '会計': '法務担当、経理、会計スタッフ',
+  '飲食': '店長候補、サービススタッフ',
+  '金型': '金型設計、金型エンジニア、製造技術者',
+  '一般': '日本語人材・バイリンガル人材'
+};
+
+// 英語版職種
+const JOB_TYPES_EN_BY_INDUSTRY: Record<string, string> = {
+  'IT': 'IT engineers, developers, and programmers',
+  'manufacturing': 'production management, quality control, and technical staff',
+  'trading': 'sales, trading, and administrative positions',
+  'construction': 'construction management, site supervisors, and CAD operators',
+  'logistics': 'logistics management, warehouse management, and customs specialists',
+  'consulting': 'consultants and administrative assistants',
+  'general': 'Japanese-speaking and bilingual professionals'
 };
 
 const SIGNATURE_JA = `
@@ -107,6 +144,8 @@ License: 31116/SLDTBXH-GPGH`;
 // 型定義
 // ========================================
 
+type GreetingType = 'standard' | 'visited_recent' | 'visited_1to3months' | 'visited_3to6months' | 'visited_over6months' | 'visited_unknown';
+
 interface EmailDraftInput {
   // 必須項目
   companyId: string;
@@ -115,11 +154,18 @@ interface EmailDraftInput {
   recipientName: string;        // 例: "小野寺様", "Mr. Tan"
   template: keyof typeof TEMPLATES;
 
-  // カスタム段落（オプション）
+  // 職種（パターンA/Bで使用）
+  industry?: string;            // 業種キーワード（例: "製造", "IT", "コンサル"）
+  jobTypes?: string;            // 直接指定する場合（例: "金型エンジニア、製造技術者"）
+
+  // カスタム段落（オプション）- 挨拶の後、テンプレートの前に挿入
   customParagraph?: string;     // 例: "前回10月に金型エンジニアをご提案しましたが、その後いかがでしょうか。"
 
-  // 件名（オプション、デフォルトあり）
-  subject?: string;
+  // 挨拶タイプ
+  greeting?: GreetingType;      // デフォルト: 'standard'
+
+  // 件名（オプション）
+  subject?: string;             // 指定なしの場合、状況に応じて自動設定
 
   // Slack通知用メタデータ
   companySummary: string;       // 会社概要（箇条書き）
@@ -137,22 +183,101 @@ interface EmailDraftInput {
 // メール本文生成
 // ========================================
 
+function getGreeting(type: GreetingType, recipientName: string, isEnglish: boolean): string {
+  if (isEnglish) {
+    return `Dear ${recipientName},\n\n`;
+  }
+
+  const greetings: Record<GreetingType, string> = {
+    'standard': 'お世話になっております。',
+    'visited_recent': '先日はお時間をいただきありがとうございました。',
+    'visited_1to3months': 'お世話になっております。',
+    'visited_3to6months': 'ご無沙汰しております。',
+    'visited_over6months': '大変ご無沙汰しております。',
+    'visited_unknown': 'ご無沙汰しております。以前お伺いした際は大変お世話になりました。'
+  };
+
+  return `${recipientName}\n\n${greetings[type]}\nキャリアリンクの佐藤でございます。\n\n`;
+}
+
+function getJobTypes(input: EmailDraftInput): string {
+  // 直接指定があればそれを使用
+  if (input.jobTypes) {
+    return input.jobTypes;
+  }
+
+  // 業種から職種を取得
+  if (input.industry) {
+    const industry = input.industry;
+    for (const [key, value] of Object.entries(JOB_TYPES_BY_INDUSTRY)) {
+      if (industry.includes(key)) {
+        return value;
+      }
+    }
+  }
+
+  // デフォルト
+  return JOB_TYPES_BY_INDUSTRY['一般'];
+}
+
+function getJobTypesEn(input: EmailDraftInput): string {
+  if (input.jobTypes) {
+    return input.jobTypes;
+  }
+
+  if (input.industry) {
+    const industry = input.industry.toLowerCase();
+    for (const [key, value] of Object.entries(JOB_TYPES_EN_BY_INDUSTRY)) {
+      if (industry.includes(key)) {
+        return value;
+      }
+    }
+  }
+
+  return JOB_TYPES_EN_BY_INDUSTRY['general'];
+}
+
+function getDefaultSubject(input: EmailDraftInput): string {
+  const isEnglish = input.template === 'pattern_en';
+
+  if (isEnglish) {
+    return 'Recruitment Support - CareerLink Vietnam';
+  }
+
+  // 求人受領中
+  if (input.template === 'pattern_c') {
+    return '採用活動のご状況確認【キャリアリンク佐藤】';
+  }
+
+  // 訪問済み
+  if (input.greeting && input.greeting !== 'standard') {
+    return '採用活動のご状況確認【キャリアリンク佐藤】';
+  }
+
+  // 初回コンタクト
+  return 'ご挨拶【キャリアリンク佐藤】';
+}
+
 function generateEmailBody(input: EmailDraftInput): string {
   const template = TEMPLATES[input.template];
-  const isEnglish = input.template.endsWith('_en');
+  const isEnglish = input.template === 'pattern_en';
 
-  // 宛名
-  const greeting = isEnglish
-    ? `Dear ${input.recipientName},\n\n`
-    : `${input.recipientName}\n\nお世話になっております。\nキャリアリンクの佐藤でございます。\n\n`;
+  // 挨拶
+  const greetingType = input.greeting || 'standard';
+  const greeting = getGreeting(greetingType, input.recipientName, isEnglish);
 
   // カスタム段落（あれば）
   const customSection = input.customParagraph
     ? `${input.customParagraph}\n\n`
     : '';
 
-  // テンプレート本文
-  const templateBody = template.body;
+  // テンプレート本文（職種を置換）
+  let templateBody = template.body;
+  if (isEnglish) {
+    templateBody = templateBody.replace('{jobTypes}', getJobTypesEn(input));
+  } else {
+    templateBody = templateBody.replace('{職種}', getJobTypes(input));
+  }
 
   // 署名
   const signature = isEnglish ? SIGNATURE_EN : SIGNATURE_JA;
@@ -176,9 +301,7 @@ async function createDraftAndNotify(input: EmailDraftInput) {
 
   // メール本文生成
   const body = generateEmailBody(input);
-  const subject = input.subject || (input.template.endsWith('_en')
-    ? 'Recruitment Support - CareerLink Vietnam'
-    : 'ご挨拶【キャリアリンク佐藤】');
+  const subject = input.subject || getDefaultSubject(input);
 
   console.log('========================================');
   console.log('メール内容プレビュー');
@@ -186,6 +309,9 @@ async function createDraftAndNotify(input: EmailDraftInput) {
   console.log('To:', input.recipientEmail);
   console.log('Subject:', subject);
   console.log('Template:', TEMPLATES[input.template].name);
+  if (input.industry) console.log('Industry:', input.industry);
+  if (input.jobTypes) console.log('JobTypes:', input.jobTypes);
+  if (input.greeting) console.log('Greeting:', input.greeting);
   console.log('');
   console.log('--- 本文 ---');
   console.log(body);
@@ -260,7 +386,7 @@ async function createDraftAndNotify(input: EmailDraftInput) {
         type: 'context',
         elements: [{
           type: 'mrkdwn',
-          text: `Draft ID: \`${result.draftId}\` | ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`
+          text: `Draft ID: \`${result.draftId}\` | Template: ${input.template} | ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`
         }]
       }
     ]
@@ -284,6 +410,9 @@ async function createDraftAndNotify(input: EmailDraftInput) {
       recipientName: input.recipientName,
       subject: subject,
       template: input.template,
+      industry: input.industry || null,
+      jobTypes: input.jobTypes || null,
+      greeting: input.greeting || 'standard',
       customParagraph: input.customParagraph || null,
       crmUrl: crmUrl,
       draftId: result.draftId,
@@ -319,10 +448,12 @@ JSONファイル形式:
   "companyName": "Tombow Manufacturing Asia Co., Ltd.",
   "recipientEmail": "onoderas@tombow-tma.com.vn",
   "recipientName": "小野寺様",
-  "template": "past_job_followup_ja",
+  "template": "pattern_a",
+  "industry": "金型",
   "customParagraph": "前回10月に金型エンジニア（日本語話者）をご提案させていただきましたが、その後いかがでしょうか。",
+  "greeting": "standard",
   "companySummary": "• トンボ鉛筆グループ製造会社\\n• 金型・組み立て",
-  "actionSummary": "• 過去求人フォロー\\n• 前回: 2025/10 金型エンジニア提案",
+  "actionSummary": "• 過去求人フォロー\\n• 前回: 2025/10 金型エンジニア提案\\n• テンプレート: パターンA",
   "contactHistory": {
     "visit": "佐藤訪問済",
     "phone": "不明",
@@ -332,11 +463,25 @@ JSONファイル形式:
   "hasPersonalEmail": true
 }
 
-有効なテンプレート:
-  - manufacturing_ja    : 製造業向け（日本語）
-  - sales_admin_ja      : 営業・事務向け（日本語）
-  - general_en          : General (English)
-  - past_job_followup_ja: 過去求人フォロー（日本語）
+テンプレート:
+  - pattern_a : パターンA - 具体的な価値を伝える（{職種}を業種に応じて変更）
+  - pattern_b : パターンB - シンプルに親しみやすく（{職種}を業種に応じて変更）
+  - pattern_c : パターンC - 求人受領中クライアント向け
+  - pattern_en: 英語版
+
+挨拶タイプ (greeting):
+  - standard           : お世話になっております（デフォルト）
+  - visited_recent     : 先日はお時間をいただきありがとうございました（訪問1ヶ月以内）
+  - visited_1to3months : お世話になっております（訪問1〜3ヶ月）
+  - visited_3to6months : ご無沙汰しております（訪問3〜6ヶ月）
+  - visited_over6months: 大変ご無沙汰しております（訪問6ヶ月以上）
+  - visited_unknown    : ご無沙汰しております。以前お伺いした際は...（訪問日不明）
+
+業種キーワード (industry):
+  IT, オフショア, 製造, 工場, メーカー, 商社, 建設, 物流, 倉庫,
+  コンサル, サービス, 法務, 会計, 飲食, 金型, 一般
+
+※ パターンA/Bは交互に使用すること（テンプレート感を減らすため）
 `);
   process.exit(1);
 }
