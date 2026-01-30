@@ -1194,6 +1194,7 @@ EOF
 | 14845 | Showa Vietnam | showa.vn@shou-wa.com | ✅ 下書き作成済み | CRM Action登録エラー（Nishizawa様宛て、パターンB・縫製） |
 | 14721 | Environment Space Engineering | t-fujii@kankyo-set.co.jp | ✅ 下書き作成済み | CRM Action登録エラー（藤井様宛て、パターンVisited・設計） |
 | 14702 | BITEC GLOBAL VIETNAM | muroi@bitecglobal.com | ✅ 下書き作成済み | CRM Action登録エラー（室井様宛て、パターンC・契約済み） |
+| 14654 | OTSUKA TECHNO VIETNAM | Tsutsui.shigeru@otsuka.jp | ✅ 下書き作成済み | CRM Action登録エラー（筒井様宛て、パターンVisited・医療） |
 
 ### 未処理企業（次回継続）
 | 企業ID | 企業名 | 備考 |
